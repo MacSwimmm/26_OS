@@ -38,7 +38,7 @@ chmod +x scripts/run_experiments.sh
 ├── scripts/run_experiments.sh # Ubuntu/Linux 一键运行脚本
 ├── tests/                     # 可重复的单元测试
 ├── docs/                      # 架构、实验和分工说明
-└── results/                   # 实验运行后生成的 JSON/CSV（不提交大文件）
+└── results/                   # 实验运行后生成的 JSON（不提交大文件）
 ```
 
 ## 论文和答辩使用方式
