@@ -17,11 +17,13 @@
 只需要 Python 3.10+，不需要第三方包：
 
 ```bash
-python3 run_demo.py --scenario baseline
-python3 run_demo.py --scenario compare --output results/compare.json
-python3 run_demo.py --scenario deadlock --output results/deadlock.json
+python3 run_demo.py --scenario baseline --live
+python3 run_demo.py --scenario compare
+python3 run_demo.py --scenario deadlock
 python3 -m unittest discover -s tests -v
 ```
+
+默认结果视图显示任务状态表和关键指标。加 `--live` 可按模拟时间查看正在运行、等待、暂停、恢复和完成事件；默认每步停留 0.25 秒，可用 `--delay 0.5` 放慢或 `--delay 0` 关闭等待。`--view trace` 显示单组事件时间线，`--view json` 显示完整数据。用 `--output results/baseline.json` 保存完整 JSON 结果，不影响终端简报。
 
 也可以使用 Linux 启动脚本：
 

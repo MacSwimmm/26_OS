@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .deadlock import build_wait_for_graph, choose_recovery_victim, find_cycles
 from .models import Interrupt, InterruptType, Metrics, SchedulerConfig, Task, TaskState
@@ -331,11 +331,12 @@ class Scheduler:
         self.metrics.busy_ticks += busy_count
         self.metrics.resource_capacity_ticks += capacity_count
 
-    def run(self) -> dict:
+    def run(self, progress_callback: Callable[[int, dict[str, Task], list[dict]], None] | None = None) -> dict:
         self._record("static_order", order=self.static_schedule())
         for task in self.tasks.values():
             if task.submitted_at == 0:
                 task.state = TaskState.READY
+        reported_events = len(self.trace)
         while self.time < self.config.max_time:
             self._apply_interrupts()
             self._resume_ready_tasks()
@@ -343,6 +344,10 @@ class Scheduler:
             self._account_resources()
             self._detect_and_recover()
             self._finish_tasks()
+            if progress_callback is not None:
+                new_events = self.trace[reported_events:]
+                progress_callback(self.time, self.tasks, new_events)
+                reported_events = len(self.trace)
             all_finished = all(task.is_finished for task in self.tasks.values())
             no_future_events = self.interrupt_index >= len(self.interrupts)
             if all_finished and no_future_events:
