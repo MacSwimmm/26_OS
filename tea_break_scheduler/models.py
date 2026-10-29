@@ -17,6 +17,7 @@ class TaskState(str, Enum):
     READY = "ready"
     RUNNING = "running"
     BLOCKED = "blocked"
+    PAUSED = "paused"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -25,6 +26,7 @@ class InterruptType(str, Enum):
     URGENT = "urgent"
     ENVIRONMENT = "environment"
     FAULT = "fault"
+    RESTORE = "restore"
 
 
 @dataclass
@@ -39,6 +41,27 @@ class Resource:
     capacity: int = 1
     shared: bool = False
     blocked_until: int = 0
+
+    def __post_init__(self) -> None:
+        if self.capacity <= 0:
+            raise ValueError("resource capacity must be positive")
+
+
+@dataclass
+class TaskStage:
+    """One execution stage and its incremental resource claim."""
+
+    name: str
+    duration: int
+    resources: dict[str, int] = field(default_factory=dict)
+    release_resources: list[str] = field(default_factory=list)
+    preemptible: bool = True
+
+    def __post_init__(self) -> None:
+        if self.duration <= 0:
+            raise ValueError("stage duration must be positive")
+        if any(amount <= 0 for amount in self.resources.values()):
+            raise ValueError("stage resource claims must be positive")
 
 
 @dataclass
@@ -61,14 +84,48 @@ class Task:
     finished_at: int | None = None
     preemptions: int = 0
     saved_remaining: int | None = None
+    stages: list[TaskStage] = field(default_factory=list)
+    max_claim: dict[str, int] = field(default_factory=dict)
+    rollback_allowed: bool = False
+    checkpoint: int = 0
+    retry_count: int = 0
+    max_retries: int = 3
+    arrival_time: int | None = None
+    completed_work: int = 0
+    rolled_back_work: int = 0
+    stage_index: int = 0
 
     def __post_init__(self) -> None:
         if self.duration <= 0:
             raise ValueError("duration must be positive")
         if self.deadline < 0:
             raise ValueError("deadline must be non-negative")
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        if self.checkpoint < 0:
+            raise ValueError("checkpoint must be non-negative")
         if self.remaining is None:
             self.remaining = self.duration
+        if self.arrival_time is None:
+            self.arrival_time = self.submitted_at
+        if any(dep == self.task_id for dep in self.dependencies):
+            raise ValueError("task cannot depend on itself")
+        if not self.max_claim:
+            self.max_claim = dict(self.resources)
+            for stage in self.stages:
+                for resource, amount in stage.resources.items():
+                    self.max_claim[resource] = max(self.max_claim.get(resource, 0), amount)
+        for resource, amount in self.resources.items():
+            if amount < 0 or self.max_claim.get(resource, 0) < amount:
+                raise ValueError("max_claim must cover task resource requirements")
+        for stage in self.stages:
+            if any(self.max_claim.get(resource, 0) < amount
+                   for resource, amount in stage.resources.items()):
+                raise ValueError("max_claim must cover every stage resource request")
+        if self.stages:
+            self.remaining = self.stages[0].duration
+            if self.checkpoint < 0 or self.checkpoint > len(self.stages):
+                raise ValueError("checkpoint must be a valid completed-stage index")
 
     @property
     def is_finished(self) -> bool:
@@ -79,6 +136,18 @@ class Task:
         if self.finished_at is None:
             return 0
         return max(0, self.finished_at - self.deadline)
+
+    @property
+    def current_stage(self) -> TaskStage | None:
+        if not self.stages or self.stage_index >= len(self.stages):
+            return None
+        return self.stages[self.stage_index]
+
+    @property
+    def response_time(self) -> int | None:
+        if self.finished_at is None:
+            return None
+        return self.finished_at - int(self.arrival_time or 0)
 
 
 @dataclass(frozen=True)
@@ -92,6 +161,7 @@ class Interrupt:
     resource: str | None = None
     duration: int = 0
     target_task_id: str | None = None
+    end_at: int | None = None
 
 
 @dataclass
@@ -122,24 +192,37 @@ class Metrics:
     deadlocks: int = 0
     recoveries: int = 0
     preemptions: int = 0
+    safety_rejections: int = 0
+    rollback_count: int = 0
+    rollback_work: int = 0
+    resource_busy_ticks: dict[str, int] = field(default_factory=dict)
+    resource_available_ticks: dict[str, int] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, float | int]:
         completion_rate = self.completed_tasks / self.total_tasks if self.total_tasks else 0.0
-        average_delay = self.total_delay / self.completed_tasks if self.completed_tasks else 0.0
-        utilization = self.busy_ticks / self.resource_capacity_ticks if self.resource_capacity_ticks else 0.0
-        urgent_miss_rate = self.urgent_missed / self.urgent_tasks if self.urgent_tasks else 0.0
+        average_delay = self.total_delay / self.completed_tasks if self.completed_tasks else None
+        utilization = self.busy_ticks / self.resource_capacity_ticks if self.resource_capacity_ticks else None
+        urgent_miss_rate = self.urgent_missed / self.urgent_tasks if self.urgent_tasks else None
         return {
             "total_tasks": self.total_tasks,
             "completed_tasks": self.completed_tasks,
             "cancelled_tasks": self.cancelled_tasks,
             "completion_rate": round(completion_rate, 4),
-            "average_completion_delay": round(average_delay, 4),
-            "resource_utilization": round(utilization, 4),
+            "average_completion_delay": round(average_delay, 4) if average_delay is not None else None,
+            "average_lateness": round(self.total_delay / self.completed_tasks, 4) if self.completed_tasks else None,
+            "resource_utilization": round(utilization, 4) if utilization is not None else None,
             "deadlock_count": self.deadlocks,
             "conflict_count": self.conflicts,
-            "urgent_task_miss_rate": round(urgent_miss_rate, 4),
+            "urgent_task_miss_rate": round(urgent_miss_rate, 4) if urgent_miss_rate is not None else None,
             "recoveries": self.recoveries,
             "preemptions": self.preemptions,
+            "safety_rejection_count": self.safety_rejections,
+            "rollback_count": self.rollback_count,
+            "rollback_work": self.rollback_work,
+            "resource_utilization_by_resource": {
+                name: round(self.resource_busy_ticks.get(name, 0) / available, 4) if available else None
+                for name, available in self.resource_available_ticks.items()
+            },
         }
 
 

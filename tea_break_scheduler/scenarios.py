@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from .models import Interrupt, InterruptType, Resource, SchedulerConfig, Task
+from .models import Interrupt, InterruptType, Resource, SchedulerConfig, Task, TaskStage
 from .scheduler import Scheduler
 
 
@@ -49,7 +49,7 @@ def interrupts() -> list[Interrupt]:
         Interrupt(
             at=11,
             kind=InterruptType.FAULT,
-            description="回收区传感器故障，取消维护任务",
+            description="维护操作位短暂故障，暂停后恢复任务",
             target_task_id="T4",
         ),
     ]
@@ -81,13 +81,32 @@ def run_comparison() -> dict[str, dict]:
 
 
 def deadlock_demo() -> dict:
-    """Return a small two-task cycle for the paper's RAG figure."""
+    """Run the same staged task input under avoidance and recovery policies."""
 
-    from .deadlock import build_wait_for_graph, find_cycles
+    def deadlock_tasks() -> list[Task]:
+        return [
+            Task("A", "整理茶歇台后转移物品", 2, 30, 2,
+                 stages=[TaskStage("占用茶歇台", 1, {"tea_table": 1}),
+                         TaskStage("申请回收区", 1, {"return_station": 1})],
+                 rollback_allowed=True),
+            Task("B", "占用回收区后整理台面", 1, 30, 2,
+                 stages=[TaskStage("占用回收区", 1, {"return_station": 1}),
+                         TaskStage("申请茶歇台", 1, {"tea_table": 1})],
+                 rollback_allowed=True),
+        ]
 
-    allocation = {"A": {"tea_table": 1}, "B": {"return_station": 1}}
-    waiting = {"A": {"return_station": 1}, "B": {"tea_table": 1}}
-    graph = build_wait_for_graph(allocation, waiting)
-    serializable_graph = {task_id: sorted(owners) for task_id, owners in graph.items()}
-    return {"allocation": allocation, "waiting": waiting, "wait_for_graph": serializable_graph,
-            "cycles": find_cycles(graph)}
+    def run_variant(banker: bool, detect: bool, recover: bool) -> dict:
+        scheduler = Scheduler(deadlock_tasks(),
+                              {"tea_table": Resource("tea_table"),
+                               "return_station": Resource("return_station")},
+                              SchedulerConfig(workers=2, banker_enabled=banker,
+                                              deadlock_detection=detect,
+                                              deadlock_recovery=recover,
+                                              max_time=20))
+        return scheduler.run()
+
+    return {
+        "avoidance": run_variant(True, True, False),
+        "detection_only": run_variant(False, True, False),
+        "detection_and_recovery": run_variant(False, True, True),
+    }

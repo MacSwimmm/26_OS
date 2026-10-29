@@ -28,20 +28,28 @@ class ResourceManager:
         return result
 
     def banker_state(self, tasks: dict[str, Task], now: int) -> BankerState:
-        maximum = {task_id: dict(task.resources) for task_id, task in tasks.items()}
+        maximum = {
+            task_id: dict(task.max_claim or task.resources)
+            for task_id, task in tasks.items()
+            if not task.is_finished and task.submitted_at <= now
+        }
         return BankerState(self.available(now), self.allocation, maximum)
 
-    def try_acquire(self, task: Task, tasks: dict[str, Task], now: int) -> AllocationResult:
-        if any(name not in self.resources for name in task.resources):
+    def try_acquire(self, task: Task, tasks: dict[str, Task], now: int,
+                    request: dict[str, int] | None = None) -> AllocationResult:
+        request = task.resources if request is None else request
+        if any(name not in self.resources for name in request):
             return AllocationResult(False, "unknown resource")
         available = self.available(now)
-        if any(amount > available.get(name, 0) for name, amount in task.resources.items()):
+        if any(amount > available.get(name, 0) for name, amount in request.items()):
             return AllocationResult(False, "resource unavailable")
         if self.banker_enabled:
             state = self.banker_state(tasks, now)
-            if not request_is_safe(state, task.task_id, task.resources):
+            if not request_is_safe(state, task.task_id, request):
                 return AllocationResult(False, "Banker safety check rejected request")
-        self.allocation[task.task_id] = dict(task.resources)
+        held = self.allocation.setdefault(task.task_id, {})
+        for name, amount in request.items():
+            held[name] = held.get(name, 0) + amount
         return AllocationResult(True, "granted")
 
     def release(self, task_id: str) -> None:
