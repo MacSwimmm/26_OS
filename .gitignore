@@ -4,3 +4,11 @@ __pycache__/
 results/*.json
 results/*.csv
 .pytest_cache/
+.rea-runtime/
+vendor/
+
+# Local dashboard checks and REA investigation artifacts
+tests/dashboard_browser.mjs
+docs/evidence/
+docs/INTERACTION_SPEC.md
+docs/REA逆向工作流.md

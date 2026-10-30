@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101312">
+  <title>TeaFlow OS · 调度控制台</title>
+  <link rel="stylesheet" href="assets/dashboard-effects.css">
+</head>
+<body>
+  <div class="announcement"><i class="pixel-flourish"></i><span><strong>OS COURSE PROJECT</strong>　茶歇服务任务调度仿真</span><button id="noticeAction">查看实验结果　→</button><i class="pixel-flourish right"></i><button class="announcement-close" id="closeAnnouncement" aria-label="关闭顶部公告" title="关闭顶部公告">×</button></div>
+  <div class="app">
+    <main>
+      <header class="topbar">
+        <a class="site-brand" href="#overview" aria-label="TeaFlow OS 首页">TeaFlow</a>
+        <nav class="primary-nav nav" aria-label="主导航">
+          <button class="active" data-view="overview">运行总览</button>
+          <div class="scenario-menu"><button id="scenarioTrigger" aria-expanded="false" aria-controls="scenarioMenu" aria-haspopup="true">仿真场景 <span class="chevron"></span></button><div class="scenario-popover" id="scenarioMenu" hidden></div></div>
+          <button data-view="tasks">任务调度</button>
+          <button data-view="resources">资源管理</button>
+          <button data-view="experiments">实验与死锁</button>
+          <button class="settings-link" id="openSettings">控制台设置</button>
+        </nav>
+        <div class="top-actions"><div class="connection"><i class="dot"></i><span id="connectionState">正在连接本地引擎</span></div><select id="scenario" class="small-select" aria-label="选择仿真场景"><option value="baseline">完整调度</option><option value="no_dynamic">静态调度</option><option value="no_deadlock">关闭死锁保护</option><option value="non_preemptive">非抢占调度</option><option value="compare">调度策略对比</option><option value="deadlock">死锁避免与恢复</option></select><button class="run-btn" id="runButton"><i class="run-symbol"></i><span class="run-text">开始仿真</span></button></div>
+      </header>
+      <div class="run-error" id="runError" role="alert" hidden><span id="runErrorMessage"></span><button class="text-btn" id="retryRun">重新运行 →</button></div>
+      <div class="content">
+        <section class="view active" id="view-overview" data-page="overview">
+          <section class="hero" id="overview">
+            <canvas id="pixelField" aria-hidden="true"></canvas>
+            <div class="hero-inner">
+              <div class="hero-copy"><div class="hero-kicker">OPERATING SYSTEM · <span id="railProject">茶歇服务员任务调度</span></div><h1>TeaFlow OS</h1><h2 class="hero-title" id="pageTitle">茶歇服务调度控制台</h2><p class="hero-subtitle" id="pageSubtitle">运行状态、资源占用与调度事件的实时视图</p></div>
+              <div class="hero-aside"><button class="hero-run" id="heroRun"><i class="run-symbol"></i>开始仿真 <span class="action-arrow">↗</span></button><div class="hero-state"><span><i class="dot"></i><span id="heroEngineState">本地离散仿真</span></span><small id="dateChip">离散时钟 · t = 0</small></div></div>
+            </div>
+          </section>
+          <section class="overview-content" id="simulation" data-playback="ready">
+            <header class="session-intro">
+              <h2 id="sessionTitle">茶歇服务员任务调度</h2>
+              <p id="noticeCopy">运行本地仿真，逐步查看任务抢占、资源分配、中断响应与故障恢复。</p>
+              <button class="session-action" id="sessionRun">开始仿真 <span>↗</span></button>
+            </header>
+            <div class="session-controls" id="sessionControls">
+              <div class="session-identity"><span class="section-index">SESSION / <span id="sessionScenario">完整调度</span></span><span class="status-label"><i class="dot"></i><span id="playState">等待开始</span></span></div>
+              <div class="playback-controls">
+                <button class="small-btn step-btn" id="stepBack" title="上一个时刻" aria-label="上一个时刻">‹</button>
+                <button class="small-btn" id="playButton" title="播放或暂停">▶ 播放</button>
+                <button class="small-btn step-btn" id="stepForward" title="下一个时刻" aria-label="下一个时刻">›</button>
+                <select id="speed" class="small-select" aria-label="回放速度"><option value="900">1× 速度</option><option value="450">2× 速度</option><option value="180">5× 速度</option></select>
+                <input id="timeRange" type="range" min="0" max="0" value="0" aria-label="选择模拟时刻">
+                <span id="timeLabel">t = 0</span>
+              </div>
+            </div>
+            <div class="monitor-navigation">
+              <div class="monitor-tabs" role="tablist" aria-label="仿真观察视图"></div>
+              <div class="monitor-arrows"><button id="monitorPrev" class="square-arrow" aria-label="上一个展示" disabled>←</button><button id="monitorNext" class="square-arrow next" aria-label="下一个展示">→</button></div>
+            </div>
+            <div class="monitor-viewport" id="monitorViewport" tabindex="0" aria-label="左右切换仿真展示">
+              <div class="monitor-track" id="monitorTrack">
+                <article class="monitor-slide is-active" data-widget="timeline" data-label="执行时间线" id="slide-timeline" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Scheduler</span><span class="window-meta">执行时间线</span></div><div class="timeline-heading"><h3>任务执行轨迹</h3><span class="panel-sub">模拟时钟 / t</span></div><div class="gantt" id="gantt"></div><div class="surface-note"><i></i>亮色区间表示已经运行的步骤，灰色区间表示后续调度。</div></div>
+                  <div class="slide-caption"><h3>执行时间线，<br>动态调度与抢占</h3><p>拖动时间轴或逐步播放，查看任务何时执行、何时中断，以及紧急任务如何改变调度顺序。所有状态均来自本地调度器。</p></div>
+                </article>
+                <article class="monitor-slide" data-widget="tasks" data-label="任务队列" id="slide-tasks" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Tasks</span><button class="text-btn window-meta" data-goto="tasks">全部任务 ↗</button></div><div class="timeline-heading"><h3>当前任务队列</h3><span class="panel-sub">按模拟时刻更新</span></div><div class="task-list" id="taskPreview"></div></div>
+                  <div class="slide-caption"><h3>任务队列，<br>优先级与执行状态</h3><p>优先级、剩余工作与执行阶段随时钟同步更新。进入任务详情，还可以筛选状态并导出本次仿真结果。</p></div>
+                </article>
+                <article class="monitor-slide" data-widget="resources" data-label="资源分配" id="slide-resources" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Resources</span><button class="text-btn window-meta" data-goto="resources">分配明细 ↗</button></div><div class="timeline-heading"><h3>当前资源分配</h3><span class="panel-sub">互斥资源 / 4</span></div><div class="resource-list" id="resourcePreview"></div></div>
+                  <div class="slide-caption"><h3>资源分配，<br>占用者与可用容量</h3><p>茶歇台、取杯区、回收区与通行通道的占用同步呈现。观察互斥检查与银行家算法如何共同决定下一次分配。</p></div>
+                </article>
+                <article class="monitor-slide" data-widget="chart" data-label="运行趋势" id="slide-chart" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Metrics</span><span class="window-meta">运行趋势</span></div><div class="timeline-heading"><h3>任务状态随时间变化</h3><div class="legend"><span><i></i>已完成</span><span><i class="legend-green"></i>活动中</span></div></div><div class="chart-wrap" id="chart"></div><div class="chart-caption"><span>仿真开始</span><span>仿真结束</span></div></div>
+                  <div class="slide-caption"><h3>运行趋势，<br>完成任务与活动任务</h3><p>完成数量与活动任务在同一坐标中呈现。竖线跟随当前时钟移动，便于对应事件与系统负载的变化。</p></div>
+                </article>
+                <article class="monitor-slide" data-widget="events" data-label="事件日志" id="slide-events" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Trace</span><span class="window-meta" id="eventCount">0 条事件</span></div><div class="timeline-heading"><h3>当前调度事件</h3><span class="panel-sub">最新事件优先</span></div><div class="events" id="eventFeed"></div></div>
+                  <div class="slide-caption"><h3>事件日志，<br>调度决策与中断记录</h3><p>任务到达、资源申请、抢占和恢复按时间记录。拖动模拟时钟，日志只展示当时已经发生的事件。</p></div>
+                </article>
+                <article class="monitor-slide" data-widget="features" data-label="核心机制" id="slide-features" role="tabpanel">
+                  <div class="monitor-surface"><div class="window-bar"><span class="window-mark">▣</span><span>TeaFlow / Mechanisms</span><button class="text-btn window-meta" id="noticeActionInner">实验与死锁 ↗</button></div><div class="timeline-heading"><h3>从调度到恢复</h3><span class="panel-sub">课程设计 / 功能索引</span></div><div class="feature-grid" id="featureGrid"></div></div>
+                  <div class="slide-caption"><h3>核心机制，<br>调度策略与死锁处理</h3><p>切换完整调度、静态调度与非抢占场景，或进入实验，比较不同策略下的完成率、冲突与死锁恢复结果。</p></div>
+                </article>
+              </div>
+              <div class="monitor-empty" hidden>展示模块已隐藏，可在控制台设置中重新开启。</div>
+            </div>
+            <div class="session-readout"><div class="readout-heading"><span>当前时刻 / 运行指标</span><button class="text-btn" id="backToScene">返回场景 ↑</button></div><div class="metrics" id="metrics"></div></div>
+          </section>
+        </section>
+        <section class="view" id="view-tasks" data-page="tasks"><div class="view-header"><div><h2>任务调度</h2><p>任务优先级、截止时间、阶段与剩余工作</p></div><button class="small-btn" id="tasksExport">导出当前结果</button></div><section class="panel"><div class="panel-head"><div><div class="panel-title">任务状态表</div><div class="panel-sub" id="taskTableNote">等待仿真数据</div></div><select class="small-select" id="taskFilter"><option value="all">全部状态</option><option value="running">运行中</option><option value="blocked">等待资源</option><option value="paused">暂停</option><option value="completed">已完成</option></select></div><div class="table-wrap"><table class="wide-table"><thead><tr><th>任务</th><th>状态</th><th>优先级</th><th>截止时间</th><th>阶段</th><th>进度</th><th>资源</th></tr></thead><tbody id="taskTable"></tbody></table></div></section><div style="height:14px"></div><section class="panel"><div class="panel-head"><div><div class="panel-title">任务执行区间</div><div class="panel-sub">以模拟时钟刻度显示开始与完成时间</div></div></div><div class="gantt" id="ganttFull"></div></section></section>
+        <section class="view" id="view-resources" data-page="resources"><div class="view-header"><div><h2>资源管理</h2><p>互斥资源容量、可用数量与当前占用者</p></div></div><div class="metrics" id="resourceMetrics"></div><section class="panel"><div class="panel-head"><div><div class="panel-title">资源分配明细</div><div class="panel-sub">资源申请由互斥检查与银行家安全性检查共同裁决</div></div></div><div class="table-wrap"><table class="wide-table"><thead><tr><th>资源</th><th>容量</th><th>可用</th><th>占用率</th><th>当前持有任务</th><th>状态</th></tr></thead><tbody id="resourceTable"></tbody></table></div></section></section>
+        <section class="view" id="view-experiments" data-page="experiments"><div class="view-header"><div><h2>实验与死锁</h2><p>比较调度策略对任务完成和资源安全性的影响</p></div><select id="experimentMode" class="small-select"><option value="compare">调度策略对比</option><option value="deadlock">死锁三策略</option></select></div><div id="experimentContent"></div><div style="height:14px"></div><section class="panel"><div class="panel-head"><div><div class="panel-title">本次实验事件</div><div class="panel-sub">事件顺序与因果信息</div></div></div><div class="events" id="experimentEvents"></div></section></section>
+      </div>
+    </main>
+  </div>
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="控制台设置" inert>
+    <div class="drawer-head"><strong>控制台自定义</strong><button class="icon-btn" id="closeSettings" title="关闭">×</button></div>
+    <div class="drawer-content">
+      <div class="form-group"><label for="customTitle">控制台标题</label><input class="form-input" id="customTitle" maxlength="40"><small>显示在总览标题区域。</small></div>
+      <div class="form-group"><label for="customProject">项目名称</label><input class="form-input" id="customProject" maxlength="40"></div>
+      <div class="form-group"><label>主题强调色</label><div class="color-row"><input type="color" id="customAccent"><input class="form-input" id="accentText" maxlength="7" value="#e96e56"></div></div>
+      <div class="form-group"><label for="customSubtitle">总览说明</label><input class="form-input" id="customSubtitle" maxlength="80"></div>
+      <div class="form-group"><label for="customCards">自定义展示指标（JSON）</label><textarea class="form-textarea" id="customCards" spellcheck="false" placeholder='[{"label":"课程组","value":"OS-04","note":"期末项目"}]'></textarea><small>最多 4 项；字段为 label、value、note。留空则不显示自定义指标。</small></div>
+      <div class="form-group"><label>总览模块</label><div class="switch-list" id="widgetSwitches"></div></div>
+      <div class="form-group"><label>场景动效</label><div class="switch-row">动态点阵<input id="motionEnabled" type="checkbox" checked></div></div>
+      <div class="form-group"><label for="motionSpeed">流动速度 <output id="motionSpeedValue">1.0×</output></label><input id="motionSpeed" type="range" min="0.2" max="2" step="0.1" value="1"></div>
+      <div class="form-group"><label for="pixelDensity">点阵密度 <output id="pixelDensityValue">标准</output></label><input id="pixelDensity" type="range" min="5" max="12" step="1" value="7"></div>
+    </div>
+    <div class="drawer-foot"><div><button class="btn-plain" id="exportConfig">导出设置</button><button class="btn-plain" id="importConfig">导入设置</button><input id="configFile" type="file" accept="application/json" hidden></div><div><button class="btn-plain" id="resetConfig">恢复默认</button><button class="btn-primary" id="saveConfig">保存设置</button></div></div>
+  </aside>
+  <div class="toast" id="toast" role="status"></div>
+  <button id="backToTop" class="back-to-top" title="回到顶部" aria-label="回到顶部" hidden>↑</button>
+  <div class="scroll-progress" aria-hidden="true"></div>
+  <script>
+    const $ = (s, root=document) => root.querySelector(s);
+    const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+    const DEFAULT_CONFIG={title:"茶歇服务调度控制台",project:"茶歇服务员任务调度",subtitle:"运行状态、资源占用与调度事件的实时视图",accent:"#32f08c",widgets:{timeline:true,tasks:true,features:true,chart:true,resources:true,events:true},customCards:[]};
+    const widgetNames={timeline:"执行时间线",tasks:"任务队列",features:"核心机制",chart:"系统运行趋势",resources:"资源占用",events:"事件日志"};
+    const featureList=[
+      ["01","动态调度","优先级、截止时间与到达顺序共同决定任务队列。"],
+      ["02","资源互斥","茶歇台、取杯区、回收区与通道逐项分配。"],
+      ["03","银行家算法","资源分配前执行安全序列检查，避免不安全状态。"],
+      ["04","死锁恢复","等待图检测环，并按回滚策略恢复可恢复任务。"],
+      ["05","中断响应","紧急任务可抢占；环境与故障事件支持暂停恢复。"],
+      ["06","指标评估","完成率、响应时长、冲突、回滚与资源利用率。"]
+    ];
+    const eventNames={static_order:"静态调度顺序",start:"任务开始",stage_start:"阶段开始",stage_complete:"阶段完成",complete:"任务完成",resource_wait:"资源等待",urgent_submitted:"紧急任务到达",preempt:"发生抢占",pause:"任务暂停",resume_ready:"恢复就绪",deadlock_detected:"检测到死锁",rollback:"回滚恢复",deadlock_unresolved:"死锁未解除",resource_blocked:"资源关闭",resource_restored:"资源恢复",interrupt:"中断事件",cancel:"任务撤销",stop:"仿真结束"};
+    const eventColors={complete:"var(--green)",start:"var(--accent)",stage_start:"var(--accent)",urgent_submitted:"var(--red)",preempt:"var(--red)",pause:"var(--blue)",resume_ready:"var(--blue)",deadlock_detected:"var(--red)",rollback:"var(--amber)",resource_wait:"var(--amber)",resource_blocked:"var(--amber)",resource_restored:"var(--green)"};
+    const resourceNames={tea_table:"茶歇台",cup_station:"取杯区",return_station:"回收区",corridor:"通行通道"};
+    const stateNames={pending:"未到达",ready:"就绪",running:"运行中",blocked:"等待资源",paused:"暂停",completed:"已完成",cancelled:"已撤销"};
+    let config=loadConfig(), data=null, experimentData=null, activeView="overview", currentTime=0, timer=null, speed=900, taskFilter="all", runBusy=false, playbackState="ready";
+    function loadConfig(){try{return {...DEFAULT_CONFIG,...JSON.parse(localStorage.getItem("teaflow-config")||"{}"),widgets:{...DEFAULT_CONFIG.widgets,...(JSON.parse(localStorage.getItem("teaflow-config")||"{}").widgets||{})}}}catch{return structuredClone(DEFAULT_CONFIG)}}
+    function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+    function toast(text){const el=$("#toast");el.textContent=text;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2200)}
+    function current(){return data?.snapshots?.[Math.max(0,Math.min(currentTime,(data?.snapshots?.length||1)-1))]||null}
+    function applyConfig(){document.documentElement.style.setProperty("--accent",config.accent||DEFAULT_CONFIG.accent);document.documentElement.style.setProperty("--accent-soft",`${config.accent||DEFAULT_CONFIG.accent}1a`);$("#pageTitle").textContent=config.title;$("#sessionTitle").textContent=config.project;$("#railProject").textContent=config.project;$("#pageSubtitle").textContent=config.subtitle;for(const [key] of Object.entries(widgetNames)){const node=$(`[data-widget="${key}"]`);if(node)node.hidden=config.widgets[key]===false}renderCustomCards();document.dispatchEvent(new Event("teaflow:config"))}
+    function renderCustomCards(){const host=$("#metrics");$$(".custom-metric",host).forEach(n=>n.remove());(config.customCards||[]).slice(0,4).forEach((card,i)=>{const el=document.createElement("article");el.className="metric custom-metric";el.style.setProperty("--metric-color",i%2?"var(--blue)":"var(--green)");el.innerHTML=`<div class="metric-label"><span>${esc(card.label||"自定义指标")}</span><i class="metric-dot"></i></div><div class="metric-value" style="font-size:22px">${esc(card.value||"—")}</div><div class="metric-foot">${esc(card.note||"自定义内容")}</div>`;host.append(el)})}
+    function setView(name){const changed=activeView!==name;activeView=name;$$(".view").forEach(el=>el.classList.toggle("active",el.dataset.page===name));$$(".nav button[data-view]").forEach(el=>el.classList.toggle("active",el.dataset.view===name));if(name==="experiments")loadExperiment();if(changed)window.scrollTo({top:0,behavior:"instant"})}
+    function statusPill(state){return `<span class="pill ${esc(state)}">${stateNames[state]||esc(state)}</span>`}
+    function metricCard(label,value,note,color,wash){return `<article class="metric" style="--metric-color:${color};--metric-wash:${wash}"><div class="metric-label"><span>${label}</span><i class="metric-dot"></i></div><div class="metric-value">${value}</div><div class="metric-foot">${note}</div></article>`}
+    function renderMetrics(snap){const m=snap?.metrics||{};const tasks=Object.values(snap?.tasks||{}),done=tasks.filter(t=>t.state==="completed"),running=tasks.filter(t=>t.state==="running").length;const response=done.length?Math.round(done.reduce((sum,t)=>sum+(t.finished_at-(t.arrival_time||0)),0)/done.length*100)/100:null;const cards=[metricCard("任务完成率",`${Math.round((m.completion_rate||0)*100)}%`,`${m.completed_tasks??done.length} / ${m.total_tasks??tasks.length} 项完成`,"var(--green)","#edf7ef"),metricCard("正在执行",String(running),`${tasks.filter(t=>t.state==="blocked").length} 项等待资源`,"var(--accent)","#fff0ec"),metricCard("平均响应时间",response==null?"—":`${response}<small style="font-size:12px;font-weight:500"> t</small>`,"按当前已完成任务计算","var(--blue)","#eef2fd"),metricCard("资源冲突",String(m.conflict_count??0),`死锁 ${m.deadlock_count??0} 次 · 抢占 ${m.preemptions??0} 次`,"var(--amber)","#fff6e9")];$("#metrics").innerHTML=cards.join("");renderCustomCards()}
+    function renderTaskRows(snap,full=false){const host=full?$("#taskTable"):$("#taskPreview");if(!host)return;const tasks=Object.values(snap?.tasks||{});if(!tasks.length){host.innerHTML='<div class="empty">运行仿真后显示任务状态</div>';return}if(full){const filtered=taskFilter==="all"?tasks:tasks.filter(t=>t.state===taskFilter);$("#taskTableNote").textContent=`${tasks.length} 项任务 · 模拟时刻 t = ${snap.time}`;host.innerHTML=filtered.map(t=>{const pct=t.duration?Math.max(0,Math.min(100,((t.duration-(t.remaining||0))/t.duration)*100)):0;const held=Object.keys(t.held_resources||{}).map(k=>resourceNames[k]||k).join("、")||"—";return `<tr><td><strong>${esc(t.task_id)}　${esc(t.name)}</strong><div class="panel-sub">${t.urgent?"紧急任务 · ":""}到达 t=${t.submitted_at}</div></td><td>${statusPill(t.state)}</td><td>${t.priority}</td><td>t = ${t.deadline}</td><td>${esc(t.stage_name||t.name)}</td><td><div class="progress" style="width:100px"><span style="width:${pct}%"></span></div></td><td>${esc(held)}</td></tr>`}).join("")||'<tr><td colspan="7" class="empty">没有符合筛选条件的任务</td></tr>';return}host.innerHTML='<div class="task-row table-head"><span>任务名称</span><span>进度</span><span>状态</span><span>优先级</span></div>'+tasks.slice(0,5).map(t=>{const pct=t.duration?Math.max(0,Math.min(100,((t.duration-(t.remaining||0))/t.duration)*100)):0;return `<div class="task-row"><div class="task-main"><span class="task-code">${esc(t.task_id)}</span><span class="task-name"><strong>${esc(t.name)}</strong><small>${t.urgent?"紧急 · ":""}${esc(t.stage_name||"")}</small></span></div><div><div class="progress"><span style="width:${pct}%"></span></div><div class="progress-note">${t.state==="completed"?"已完成":`剩余 ${t.remaining??0} t`}</div></div>${statusPill(t.state)}<span class="priority">P${t.priority}</span></div>`}).join("")+`<div class="task-more"><button class="text-btn" data-goto="tasks">查看全部 ${tasks.length} 项任务　→</button></div>`}
+    function renderResources(snap,full=false){const entries=Object.entries(snap?.resources||{});if(full){$("#resourceMetrics").innerHTML=entries.map(([name,r])=>metricCard(resourceNames[name]||name,`${r.capacity-r.available}/${r.capacity}`,`可用 ${r.available} 个资源位`,"var(--blue)","#eef2fd")).join("");$("#resourceTable").innerHTML=entries.map(([name,r])=>{const pct=Math.round((r.capacity-r.available)/r.capacity*100),holders=Object.entries(r.holders).map(([id,n])=>`${id} ×${n}`).join("、")||"无";return `<tr><td><strong>${resourceNames[name]||esc(name)}</strong></td><td>${r.capacity}</td><td>${r.available}</td><td>${pct}%</td><td>${esc(holders)}</td><td>${r.blocked_until>snap.time?'<span class="pill blocked">临时不可用</span>':'<span class="pill completed">可分配</span>'}</td></tr>`}).join("");return}$("#resourcePreview").innerHTML=entries.map(([name,r],i)=>{const used=r.capacity-r.available,pct=Math.round(used/r.capacity*100),holder=Object.keys(r.holders).join(", ")||"当前空闲";return `<div class="resource-item"><div class="resource-name"><span class="resource-icon">${["台","杯","回","道"][i]||"资"}</span>${resourceNames[name]||esc(name)}</div><span class="resource-value">${used} / ${r.capacity} 已占用</span><div class="resource-track"><span style="width:${pct}%;--bar:${["var(--accent)","var(--blue)","var(--green)","var(--amber)"][i%4]}"></span></div><div class="resource-meta"><span>${esc(holder)}</span><span>${pct}%</span></div></div>`}).join("")||'<div class="empty">运行仿真后显示资源分配</div>'}
+    function renderEvents(events,host,limit=12,upto=Infinity){const list=(events||[]).filter(e=>e.time<=upto).slice(-limit).reverse();$(host).innerHTML=list.length?list.map((e,i)=>{const label=eventNames[e.event]||e.event,task=e.task_id?`任务 ${e.task_id}`:"",detail=e.reason||e.description||e.resource||e.stage||e.completed_stage||(e.order?e.order.join(" → "):"");return `<div class="event-row ${i===0?"is-new":""}"><span class="event-time">t ${String(e.time).padStart(2,"0")}</span><i class="event-pin" style="--event-color:${eventColors[e.event]||"var(--blue)"}"></i><div><div class="event-title">${esc(label)}${task?` · ${esc(task)}`:""}</div><div class="event-detail">${esc(detail)}</div></div></div>`}).join(""):'<div class="empty">当前时刻没有调度事件</div>'}
+    function renderChart(){const host=$("#chart");const snaps=data?.snapshots||[];if(!snaps.length){host.innerHTML='<div class="empty">仿真趋势将在运行后生成</div>';return}const n=snaps.length,completed=snaps.map(s=>Object.values(s.tasks).filter(t=>t.state==="completed").length),active=snaps.map(s=>Object.values(s.tasks).filter(t=>["running","blocked","paused"].includes(t.state)).length),max=Math.max(1,...completed,...active),w=520,h=150,p=14;function path(values){return values.map((v,i)=>`${i?"L":"M"}${p+i*(w-2*p)/Math.max(1,n-1)} ${h-p-(v/max)*(h-2*p)}`).join(" ")}const x=p+currentTime*(w-2*p)/Math.max(1,n-1);host.innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="任务状态趋势"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".18"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs><line class="chart-grid" x1="${p}" y1="${p}" x2="${w-p}" y2="${p}"/><line class="chart-grid" x1="${p}" y1="${h/2}" x2="${w-p}" y2="${h/2}"/><line class="chart-grid" x1="${p}" y1="${h-p}" x2="${w-p}" y2="${h-p}"/><path class="chart-fill" d="${path(completed)} L${w-p} ${h-p} L${p} ${h-p}Z"/><path class="chart-line" d="${path(completed)}"/><path d="${path(active)}" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"/><line x1="${x}" y1="${p}" x2="${x}" y2="${h-p}" stroke="#333a35" stroke-width="1" stroke-dasharray="3 4"/>${completed.map((v,i)=>i===currentTime?`<circle class="chart-node" cx="${x}" cy="${h-p-(v/max)*(h-2*p)}" r="4"/>`:"").join("")}<text class="chart-tick" x="2" y="${p+3}">${max}</text><text class="chart-tick" x="3" y="${h-p}">0</text></svg>`}
+    function renderGantt(host,snapshots){
+      if(!data?.result||!snapshots?.length){host.innerHTML='<div class="empty">运行仿真后显示任务区间</div>';return}
+      const tasks=Object.values(data.result.tasks||{});
+      const max=Math.max(1,snapshots.at(-1).time+1,...tasks.map(task=>task.finished_at||0));
+      const now=(current()?.time??0)+1;
+      host.innerHTML=tasks.map((task,index)=>{
+        // A snapshot is collected after this tick executes. Completion and stage
+        // transition events therefore also count as an executed interval.
+        const intervals=[];
+        for(const snapshot of snapshots){
+          const ran=snapshot.tasks[task.task_id]?.state==="running"||(snapshot.events||[]).some(event=>event.task_id===task.task_id&&["complete","stage_complete"].includes(event.event));
+          if(!ran)continue;
+          const start=snapshot.time,end=start+1,last=intervals.at(-1);
+          if(last&&last.end===start)last.end=end;else intervals.push({start,end});
+        }
+        const bars=intervals.flatMap(({start,end})=>{
+          const base=`<i class="gantt-bar future" style="left:${start/max*100}%;width:${(end-start)/max*100}%" title="${esc(task.task_id)} · t=${start}–${end}"></i>`;
+          const played=Math.min(end,now)-start;
+          return [base,played>0?`<i class="gantt-bar ${task.urgent?"urgent":""}" style="left:${start/max*100}%;width:${played/max*100}%;--bar-color:${["var(--accent)","var(--blue)","var(--green)","var(--amber)"][index%4]}"></i>`:""];
+        }).join("");
+        return `<div class="gantt-row"><span class="gantt-name">${esc(task.task_id)} · ${esc(task.name)}</span><div class="gantt-track">${bars}<i class="gantt-now" style="left:${Math.min(100,now/max*100)}%"></i></div></div>`;
+      }).join("")+`<div class="gantt-scale"><span></span><div class="scale-line"><span>t = 0</span><span>${Math.round(max*.25)}</span><span>${Math.round(max*.5)}</span><span>${Math.round(max*.75)}</span><span>t = ${max}</span></div></div>`;
+    }
+    function renderOverview(){const snap=current();if(!snap)return;$("#dateChip").textContent=`离散时钟 · t = ${snap.time}`;$("#timeLabel").textContent=`t = ${snap.time}`;$("#timeRange").max=Math.max(0,(data.snapshots?.length||1)-1);$("#timeRange").value=currentTime;renderMetrics(snap);renderTaskRows(snap);renderTaskRows(snap,true);renderResources(snap);renderResources(snap,true);renderEvents(data.result?.trace||[],"#eventFeed",12,snap.time);$("#eventCount").textContent=`${(data.result?.trace||[]).filter(e=>e.time<=snap.time).length} 条事件`;renderChart();renderGantt($("#gantt"),data.snapshots);renderGantt($("#ganttFull"),data.snapshots);$("#taskTableNote").textContent=`${Object.keys(snap.tasks).length} 项任务 · 模拟时刻 t = ${snap.time}`;$("#featureGrid").innerHTML=featureList.map(x=>`<article class="feature"><i class="feature-mark">${x[0]}</i><strong>${x[1]}</strong><span>${x[2]}</span></article>`).join("");if(activeView==="experiments")loadExperiment()}
+    function setPlaybackState(state){
+      playbackState=state;
+      const labels={ready:"等待开始",loading:"正在计算",playing:"运行中",paused:"已暂停",completed:"仿真已结束",error:"运行失败"};
+      $("#playState").textContent=labels[state]||state;
+      $("#simulation").dataset.playback=state;
+      $("#playButton").textContent=state==="playing"?"Ⅱ 暂停":state==="completed"?"↻ 重播":"▶ 播放";
+      $("#heroEngineState").textContent=state==="playing"?"仿真运行中":state==="completed"?"本次仿真已结束":state==="loading"?"正在计算调度":state==="error"?"连接异常，请重试":"本地离散仿真";
+    }
+    async function runScenario(name,silent=false){
+      if(runBusy)return false;
+      runBusy=true;
+      pause("loading");
+      $("#runError").hidden=true;
+      $("#toast").classList.remove("show");
+      const controls=$$("#runButton, #heroRun, #sessionRun, #scenario, #experimentMode, #playButton, #stepBack, #stepForward, #timeRange, .scenario-choice");
+      controls.forEach(button=>button.disabled=true);
+      $("#runButton .run-text").textContent="正在计算";
+      try{
+        const response=await fetch("/api/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario:name})});
+        const result=await response.json();
+        if(!response.ok)throw new Error(result.error||"仿真请求失败");
+        $("#connectionState").textContent="本地引擎已连接";
+        if(result.comparisons){
+          experimentData=result;
+          $("#experimentMode").value=name;
+          setView("experiments");
+          setPlaybackState(data?"paused":"ready");
+        }else{
+          if(!result.snapshots?.length)throw new Error("引擎未返回可播放的仿真数据");
+          data=result;currentTime=0;
+          $("#sessionScenario").textContent=result.label;
+          renderOverview();setPlaybackState("ready");
+          if(!silent){
+            if(activeView==="experiments")setView("overview");
+            startPlayback();
+            if(activeView==="overview"){
+              document.dispatchEvent(new CustomEvent("teaflow:show-widget",{detail:"timeline"}));
+              $("#sessionControls").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth",block:"start"});
+            }
+          }
+        }
+        return true;
+      }catch(error){
+        setPlaybackState("error");
+        $("#runErrorMessage").textContent=`仿真未能启动：${error.message}。请确认本地服务仍在运行后重试。`;
+        $("#runError").hidden=false;$("#runError").scrollIntoView({block:"center",behavior:"instant"});
+        $("#connectionState").textContent="本次请求失败";
+        return false;
+      }finally{
+        runBusy=false;
+        controls.forEach(button=>button.disabled=false);
+        $("#runButton .run-text").textContent="开始仿真";
+      }
+    }
+    function pause(state){
+      if(timer){clearInterval(timer);timer=null}
+      setPlaybackState(state||(data&&currentTime>=data.snapshots.length-1?"completed":data?"paused":"ready"));
+    }
+    function startPlayback(){
+      if(!data?.snapshots?.length)return;
+      if(timer)clearInterval(timer);
+      if(currentTime>=data.snapshots.length-1)currentTime=0;
+      renderOverview();setPlaybackState("playing");
+      timer=setInterval(()=>{
+        currentTime=Math.min(currentTime+1,data.snapshots.length-1);
+        renderOverview();
+        if(currentTime>=data.snapshots.length-1)pause("completed");
+      },speed);
+    }
+    function play(){if(runBusy)return;if(!data?.snapshots?.length)return;timer?pause():startPlayback()}
+    function comparisonView(){if(!experimentData?.comparisons){$("#experimentContent").innerHTML='<div class="panel"><div class="empty">选择“调度策略对比”或“死锁三策略”，再运行仿真查看数据。</div></div>';return}const rows=experimentData.comparisons, deadlock=experimentData.scenario==="deadlock";$("#experimentContent").innerHTML=`<div class="metrics">${metricCard("实验方案",String(rows.length),deadlock?"银行家避免 / 检测 / 恢复":"基线与调度开关对比","var(--blue)","#eef2fd")}${metricCard("完成任务",rows.map(x=>x.completed_tasks).join(" / "),"按方案顺序排列","var(--green)","#edf7ef")}${metricCard("死锁次数",rows.map(x=>x.deadlock_count).join(" / "),"检测结果来自等待图环检测","var(--red)","#fff0ec")}${metricCard("回滚工作量",rows.map(x=>x.rollback_work).join(" / "),"恢复带来的重做工作","var(--amber)","#fff6e9")}</div><div class="comparison">${rows.map(r=>`<article class="compare-tile"><h3>${esc(r.label||r.name)}</h3><div class="compare-row"><span>完成率</span><strong class="good">${Math.round((r.completion_rate||0)*100)}%</strong></div><div class="compare-row"><span>完成任务</span><strong>${r.completed_tasks} / ${r.total_tasks}</strong></div><div class="compare-row"><span>平均响应时间</span><strong>${r.average_response_time==null?"—":`${r.average_response_time} t`}</strong></div><div class="compare-row"><span>资源冲突</span><strong>${r.conflict_count}</strong></div><div class="compare-row"><span>安全拒绝</span><strong>${r.safety_rejection_count}</strong></div><div class="compare-row"><span>死锁 / 回滚</span><strong>${r.deadlock_count} / ${r.rollback_count}</strong></div></article>`).join("")}</div>`;const traces=experimentData.results?Object.values(experimentData.results).flatMap(r=>r.trace||[]):[];renderEvents(traces,"#experimentEvents",18)}
+    function loadExperiment(){if(!$("#experimentContent"))return;if(experimentData?.comparisons){$("#experimentMode").value=experimentData.scenario;comparisonView()}else comparisonView()}
+    let settingsReturnFocus;
+    function openDrawer(){settingsReturnFocus=document.activeElement;syncForm();$("#drawer").inert=false;$("#scrim").classList.add("open");$("#drawer").classList.add("open");$("main").inert=true;$("#closeSettings").focus()}
+
+    function closeDrawer(){$("#scrim").classList.remove("open");$("#drawer").classList.remove("open");$("#drawer").inert=true;$("main").inert=false;settingsReturnFocus?.focus({preventScroll:true})}
+    document.addEventListener("keydown",event=>{
+      if(!$("#drawer").classList.contains("open"))return;
+      if(event.key==="Escape"){event.preventDefault();closeDrawer()}
+      if(event.key==="Tab"){
+        const controls=$$("button,input,select,textarea",$("#drawer")).filter(el=>!el.disabled&&el.offsetParent!==null);
+        const first=controls[0],last=controls.at(-1);
+        if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+        else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+      }
+    });
+    function syncForm(){$("#customTitle").value=config.title;$("#customProject").value=config.project;$("#customAccent").value=config.accent;$("#accentText").value=config.accent;$("#customSubtitle").value=config.subtitle;$("#customCards").value=JSON.stringify(config.customCards||[],null,2);$("#widgetSwitches").innerHTML=Object.entries(widgetNames).map(([key,label])=>`<div class="switch-row">${label}<button class="switch" role="switch" aria-checked="${config.widgets[key]!==false}" data-widget-switch="${key}" aria-label="显示${label}"></button></div>`).join("")}
+    function saveForm(){let cards;try{cards=JSON.parse($("#customCards").value||"[]");if(!Array.isArray(cards)||cards.length>4||cards.some(c=>typeof c.label!=="string"||typeof c.value!=="string"))throw new Error("请填写最多 4 个包含 label 和 value 的指标对象")}catch(e){toast(`自定义指标 JSON 格式无效：${e.message}`);return}const color=$("#accentText").value.trim();if(!/^#[\da-f]{6}$/i.test(color)){toast("强调色需为 6 位 HEX 颜色值");return}const widgets={...config.widgets};$$('[data-widget-switch]').forEach(sw=>widgets[sw.dataset.widgetSwitch]=sw.getAttribute("aria-checked")==="true");config={...config,title:$("#customTitle").value.trim()||DEFAULT_CONFIG.title,project:$("#customProject").value.trim()||DEFAULT_CONFIG.project,accent:color,subtitle:$("#customSubtitle").value.trim()||DEFAULT_CONFIG.subtitle,widgets,customCards:cards.slice(0,4)};localStorage.setItem("teaflow-config",JSON.stringify(config));applyConfig();closeDrawer();toast("控制台设置已保存")}
+    function download(name,object){const blob=new Blob([JSON.stringify(object,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+    function eventByTime(step){if(!data?.snapshots?.length)return;currentTime=Math.max(0,Math.min(data.snapshots.length-1,currentTime+step));renderOverview();pause()}
+    $$(".nav button[data-view]").forEach(b=>b.addEventListener("click",()=>setView(b.dataset.view)));
+    document.addEventListener("click",e=>{const goto=e.target.closest("[data-goto]");if(goto)setView(goto.dataset.goto)});
+    $("#runButton").addEventListener("click",()=>runScenario($("#scenario").value));
+    $("#heroRun").addEventListener("click",()=>runScenario($("#scenario").value));
+    $("#sessionRun").addEventListener("click",()=>runScenario($("#scenario").value));
+    $("#retryRun").addEventListener("click",()=>runScenario($("#scenario").value));
+    $("#playButton").addEventListener("click",play);$("#stepBack").addEventListener("click",()=>{pause();eventByTime(-1)});$("#stepForward").addEventListener("click",()=>{pause();eventByTime(1)});$("#timeRange").addEventListener("input",e=>{pause();currentTime=Number(e.target.value);renderOverview();pause()});$("#speed").addEventListener("change",e=>{speed=Number(e.target.value);if(timer){pause();play()}});$("#taskFilter").addEventListener("change",e=>{taskFilter=e.target.value;const snap=current();if(snap)renderTaskRows(snap,true)});
+    $("#experimentMode").addEventListener("change",e=>{$("#scenario").value=e.target.value;runScenario(e.target.value)});$("#noticeAction").addEventListener("click",()=>setView("experiments"));$("#noticeActionInner").addEventListener("click",()=>setView("experiments"));$("#tasksExport").addEventListener("click",()=>data?.result?download("teaflow-simulation.json",data.result):toast("请先运行单场景仿真"));
+    $("#openSettings").addEventListener("click",openDrawer);$("#closeSettings").addEventListener("click",closeDrawer);$("#scrim").addEventListener("click",closeDrawer);$("#saveConfig").addEventListener("click",saveForm);$("#resetConfig").addEventListener("click",()=>{config=structuredClone(DEFAULT_CONFIG);localStorage.removeItem("teaflow-config");applyConfig();syncForm();toast("已恢复默认设置")});$("#customAccent").addEventListener("input",e=>$("#accentText").value=e.target.value);$("#accentText").addEventListener("input",e=>{if(/^#[\da-f]{6}$/i.test(e.target.value))$("#customAccent").value=e.target.value});
+    $("#widgetSwitches").addEventListener("click",e=>{const sw=e.target.closest("[data-widget-switch]");if(sw)sw.setAttribute("aria-checked",sw.getAttribute("aria-checked")==="true"?"false":"true")});$("#exportConfig").addEventListener("click",()=>download("teaflow-dashboard-config.json",config));$("#importConfig").addEventListener("click",()=>$("#configFile").click());$("#configFile").addEventListener("change",async e=>{try{const imported=JSON.parse(await e.target.files[0].text());config={...DEFAULT_CONFIG,...imported,widgets:{...DEFAULT_CONFIG.widgets,...imported.widgets}};syncForm();toast("配置已载入，点击保存后生效")}catch{toast("配置文件无法读取")}e.target.value=""});
+    $("#scenario").addEventListener("change",e=>{if(e.target.value==="compare"||e.target.value==="deadlock"){$("#experimentMode").value=e.target.value}});
+    applyConfig();syncForm();$("#featureGrid").innerHTML=featureList.map(x=>`<article class="feature"><i class="feature-mark">${x[0]}</i><strong>${x[1]}</strong><span>${x[2]}</span></article>`).join("");$("#experimentContent").innerHTML='<div class="panel"><div class="empty">选择策略并运行仿真，查看真实调度结果。</div></div>';$("#eventFeed").innerHTML='<div class="empty">等待运行数据</div>';$("#taskPreview").innerHTML='<div class="empty">运行仿真后显示任务状态</div>';$("#resourcePreview").innerHTML='<div class="empty">运行仿真后显示资源分配</div>';$("#chart").innerHTML='<div class="empty">仿真趋势将在运行后生成</div>';$("#gantt").innerHTML='<div class="empty">运行仿真后显示任务区间</div>';runScenario("baseline",true);
+  </script>
+  <script src="assets/dashboard-effects.js"></script>
+</body>
+</html>

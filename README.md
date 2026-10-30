@@ -25,6 +25,16 @@ python3 -m unittest discover -s tests -v
 
 默认结果视图显示任务状态表和关键指标。加 `--live` 可按模拟时间查看正在运行、等待、暂停、恢复和完成事件；默认每步停留 0.25 秒，可用 `--delay 0.5` 放慢或 `--delay 0` 关闭等待。`--view trace` 显示单组事件时间线，`--view json` 显示完整数据。用 `--output results/baseline.json` 保存完整 JSON 结果，不影响终端简报。
 
+## 网页上位机
+
+启动本地控制台（Python 标准库，无需安装第三方依赖）：
+
+```bash
+python3 dashboard_server.py
+```
+
+浏览器打开 <http://127.0.0.1:8765>。页面会调用本项目调度器运行基线场景，并展示任务、资源、指标和事件轨迹；可选择静态调度、关闭死锁保护、非抢占、策略对比与死锁演示。点击“开始仿真”会自动进入模拟时钟播放，支持暂停、倍速、逐步查看和拖动时钟；下方可通过标签与箭头切换时间线、任务、资源、趋势和日志。右侧“控制台设置”可改标题、说明、强调色、模块显隐和自定义指标，并将设置保存到浏览器或导入/导出 JSON。
+
 也可以使用 Linux 启动脚本：
 
 ```bash
@@ -38,6 +48,9 @@ chmod +x scripts/run_experiments.sh
 26_OS/
 ├── tea_break_scheduler/       # 可复用的调度器、资源模型、死锁算法、指标
 ├── run_demo.py                # 命令行演示和对比实验入口
+├── dashboard_server.py        # 本地网页服务与仿真 API
+├── dashboard.html             # 可自定义的上位机页面
+├── assets/                    # 页面样式、动效与静态资源
 ├── scripts/run_experiments.sh # Ubuntu/Linux 一键运行脚本
 ├── tests/                     # 可重复的单元测试
 ├── docs/                      # 架构、实验和分工说明
