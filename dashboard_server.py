@@ -15,6 +15,7 @@ from tea_break_scheduler.scenarios import build_scheduler, deadlock_demo, run_co
 ROOT = Path(__file__).resolve().parent
 SCENARIOS = {
     "baseline": "完整调度",
+    "fcfs": "FCFS 调度",
     "no_dynamic": "静态调度",
     "no_deadlock": "关闭死锁保护",
     "non_preemptive": "非抢占调度",
@@ -26,9 +27,12 @@ SCENARIOS = {
 def _snapshot(scheduler, now: int, events: list[dict]) -> dict:
     tasks = {}
     for task_id, task in scheduler.tasks.items():
+        if task.submitted_at > now:
+            continue
         data = asdict(task)
         stage = task.current_stage
         data["stage_name"] = stage.name if stage else task.name
+        data["waiting_request"] = scheduler.waiting_requests.get(task_id, {}).copy()
         data["held_resources"] = scheduler.resource_manager.allocation.get(task_id, {}).copy()
         tasks[task_id] = data
     resources = {}
@@ -36,6 +40,7 @@ def _snapshot(scheduler, now: int, events: list[dict]) -> dict:
     for name, resource in scheduler.resource_manager.resources.items():
         resources[name] = {
             "capacity": resource.capacity,
+            "shared": resource.shared,
             "available": available.get(name, 0),
             "blocked_until": resource.blocked_until,
             "holders": {
@@ -48,7 +53,7 @@ def _snapshot(scheduler, now: int, events: list[dict]) -> dict:
         "time": now,
         "tasks": tasks,
         "resources": resources,
-        "events": events,
+        "events": [dict(event) for event in events],
         "metrics": scheduler.metrics.as_dict(),
     }
 
@@ -96,10 +101,16 @@ def _run_deadlock() -> dict:
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "TeaBreakDashboard/1.0"
+    server_version = "TeaBreakDashboard/2.0"
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/config":
+            self._json(json.loads((ROOT / "config.json").read_text(encoding="utf-8")))
+            return
+        if path == "/api/health":
+            self._json({"status": "ok", "engine": "tea_break_scheduler", "schema_version": 2})
+            return
         if path == "/api/scenarios":
             self._json({"scenarios": [{"id": key, "label": value} for key, value in SCENARIOS.items()]})
             return
@@ -114,7 +125,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
         assets = {
             "/assets/trae-pixel-map.png": "image/png",
             "/assets/dashboard-effects.css": "text/css; charset=utf-8",
-            "/assets/dashboard-effects.js": "text/javascript; charset=utf-8",
+            **{f"/assets/{name}": "text/javascript; charset=utf-8" for name in (
+                "dashboard-effects.js", "dashboard-app.js", "pixel-field.js", "distortion-grid.js",
+                "footer-distortion.js", "signal-distortion.js")},
+            "/assets/signal-theme.css": "text/css; charset=utf-8",
         }
         if path in assets:
             content = (ROOT / path.lstrip("/")).read_bytes()
@@ -136,8 +150,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if length < 1 or length > 1_000_000:
                 raise ValueError("request body must be between 1 byte and 1 MB")
             payload = json.loads(self.rfile.read(length))
+            if not isinstance(payload, dict):
+                raise ValueError("request must be a JSON object")
             scenario = payload.get("scenario", "baseline")
-            if scenario not in SCENARIOS:
+            if not isinstance(scenario, str) or scenario not in SCENARIOS:
                 raise ValueError("unknown scenario")
             data = _run_compare() if scenario == "compare" else _run_deadlock() if scenario == "deadlock" else _run_single(scenario)
             self._json(data)

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "seed": null,
+  "config": {
+    "workers": null,
+    "dynamic_rescheduling": true,
+    "preemptive": true,
+    "banker_enabled": true,
+    "deadlock_detection": true,
+    "deadlock_recovery": true,
+    "max_time": 10,
+    "detection_period": 1,
+    "policy": "priority"
+  },
+  "resources": {
+    "tea_table": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "A",
+      "name": "先整理",
+      "priority": 1,
+      "deadline": 10,
+      "duration": 2,
+      "dependencies": [],
+      "resources": {
+        "tea_table": 1
+      },
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [],
+      "max_claim": {
+        "tea_table": 1
+      },
+      "rollback_allowed": false,
+      "max_retries": 3,
+      "task_type": "service"
+    },
+    {
+      "task_id": "B",
+      "name": "后整理",
+      "priority": 1,
+      "deadline": 10,
+      "duration": 1,
+      "dependencies": [
+        "A"
+      ],
+      "resources": {
+        "tea_table": 1
+      },
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [],
+      "max_claim": {
+        "tea_table": 1
+      },
+      "rollback_allowed": false,
+      "max_retries": 3,
+      "task_type": "service"
+    }
+  ],
+  "events": []
+}

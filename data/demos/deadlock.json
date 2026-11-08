@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "seed": null,
+  "config": {
+    "workers": null,
+    "dynamic_rescheduling": true,
+    "preemptive": true,
+    "banker_enabled": false,
+    "deadlock_detection": true,
+    "deadlock_recovery": true,
+    "max_time": 20,
+    "detection_period": 1,
+    "policy": "priority"
+  },
+  "resources": {
+    "tea_table": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    },
+    "return_station": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "A",
+      "name": "TABLE → RECYCLE 预留",
+      "priority": 2,
+      "deadline": 30,
+      "duration": 2,
+      "dependencies": [],
+      "resources": {},
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [
+        {
+          "name": "预留茶歇台",
+          "duration": 1,
+          "resources": {
+            "tea_table": 1
+          },
+          "release_resources": [],
+          "preemptible": false
+        },
+        {
+          "name": "申请回收区",
+          "duration": 1,
+          "resources": {
+            "return_station": 1
+          },
+          "release_resources": [],
+          "preemptible": false
+        }
+      ],
+      "max_claim": {
+        "tea_table": 1,
+        "return_station": 1
+      },
+      "rollback_allowed": true,
+      "max_retries": 3,
+      "task_type": "service"
+    },
+    {
+      "task_id": "B",
+      "name": "RECYCLE → TABLE 预留",
+      "priority": 1,
+      "deadline": 30,
+      "duration": 2,
+      "dependencies": [],
+      "resources": {},
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [
+        {
+          "name": "预留回收区",
+          "duration": 1,
+          "resources": {
+            "return_station": 1
+          },
+          "release_resources": [],
+          "preemptible": false
+        },
+        {
+          "name": "申请茶歇台",
+          "duration": 1,
+          "resources": {
+            "tea_table": 1
+          },
+          "release_resources": [],
+          "preemptible": false
+        }
+      ],
+      "max_claim": {
+        "return_station": 1,
+        "tea_table": 1
+      },
+      "rollback_allowed": true,
+      "max_retries": 3,
+      "task_type": "service"
+    }
+  ],
+  "events": []
+}

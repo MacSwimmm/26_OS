@@ -1,0 +1,48 @@
+/* Black working surfaces, green signal accents; the landing hero stays independent. */
+:root { --signal-paper: var(--accent); --signal-ink: #090b0a; }
+.content { background: #101312; }
+.signal-zone { background: #101312; color: var(--ink); }
+.signal-zone :is(.session-intro h2, .view-header h2) { color: var(--accent); font-weight: 800; letter-spacing: -.04em; }
+.signal-zone .session-intro { background: #0a0d0b; border-bottom: 1px solid #263c30; }
+.signal-zone :is(.monitor-surface, .panel) { background: #121a16; border-color: #294734; box-shadow: none; }
+.signal-zone :is(.window-bar, .panel-head) { background: #0a100d; border-color: #294734; }
+.signal-zone :is(.monitor-navigation, .surface-note, .metric + .metric, .task-row, .event-row, .feature, .wide-table th, .wide-table td, .compare-row) { border-color: #294032; }
+.signal-zone :is(.panel-title, .timeline-heading h3, .metric-value, .window-mark, .feature-mark, .event-title) { color: var(--accent); }
+.signal-zone .metric { border-top: 2px solid var(--accent); padding-top: 20px; }
+.signal-zone :is(.gantt-name, .task-name strong, .resource-value, .compare-row strong) { color: #edf7f0; }
+.signal-zone :is(.panel-sub, .gantt-scale, .surface-note, .readout-heading, .metric-label, .metric-foot, .table-head, .task-code, .task-name small, .progress-note, .priority, .resource-meta, .chart-caption, .legend, .event-time, .event-detail, .feature span, .compare-row, .empty, .wide-table th) { color: #a1b5a8; }
+.signal-zone :is(.small-btn, .small-select) { background: #101a14; border-color: #365040; color: #dbede1; }
+.signal-zone :is(.small-btn:hover, .small-select:hover) { border-color: var(--accent); background: #193324; }
+.signal-zone .small-select option { background: #101a14; color: #dbede1; }
+.signal-zone .monitor-tab[aria-selected="true"] { color: var(--accent); box-shadow: 0 2px var(--accent); }
+.signal-zone .monitor-tab:hover { color: var(--accent); }
+.signal-zone .square-arrow { background: #18281e; color: var(--accent); border: 1px solid #365040; }
+.signal-zone .square-arrow.next { background: var(--accent); color: var(--signal-ink); border-color: var(--accent); }
+.signal-zone .square-arrow:disabled { background: #18201b; color: #66776c; opacity: .55; }
+.signal-zone .gantt-track { background: repeating-linear-gradient(90deg, #17271d 0, #17271d calc(10% - 1px), #2d4736 calc(10% - 1px), #2d4736 10%); }
+.signal-zone .gantt-bar.future { background: var(--accent); opacity: .14; }
+.signal-zone .chart-grid { stroke: #2d4736; }
+.signal-zone .chart-tick { fill: #a1b5a8; }
+.signal-zone .chart-node { fill: #121a16; }
+.signal-zone .resource-icon { border-color: #365040; color: var(--accent); }
+.signal-zone :is(.resource-track, .progress) { background: #2b4434; }
+.signal-zone .compare-tile { background: #121a16; border-top: 3px solid var(--accent); padding: 24px; }
+.signal-zone .compare-tile h3 { color: var(--accent); }
+.signal-zone .event-row.is-new { background: #32f08c0a; }
+.desk-footer { margin-top: 0; background: #0a0d0b; border-color: #294032; }
+.desk-footer .footer-kicker { color: #a1b5a8; }
+.drawer.signal-zone { background: #101713; border-color: #365040; }
+.drawer.signal-zone :is(.drawer-head, .drawer-foot) { background: #0a100d; border-color: #294032; }
+.drawer.signal-zone .drawer-head strong { color: var(--accent); }
+.drawer.signal-zone :is(.form-input, .form-textarea) { background: #17221b; border-color: #365040; }
+.drawer.signal-zone .form-group small { color: #a1b5a8; }
+.drawer.signal-zone input[type="checkbox"] { accent-color: var(--accent); }
+.back-to-top { background: #0a100d; color: var(--accent); border-color: #365040; }
+.toast { background: var(--accent); color: var(--signal-ink); border: 1px solid var(--signal-ink); }
+.signal-distorting { opacity: 0 !important; }
+.signal-overlay { position: fixed; pointer-events: none; z-index: 7; }
+.signal-overlay-drawer { z-index: 12; }
+@media (prefers-reduced-motion: reduce) {
+  .signal-distorting { opacity: 1 !important; }
+  .signal-overlay { display: none; }
+}

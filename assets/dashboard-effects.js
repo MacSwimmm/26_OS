@@ -1,9 +1,8 @@
 (() => {
   const $ = (selector, root = document) => root.querySelector(selector);
-  const canvas = $("#pixelField");
+  let canvas = $("#pixelField");
   const hero = $("#overview");
-  const context = canvas?.getContext("2d", { alpha: true });
-  if (!canvas || !hero || !context) return;
+  if (!canvas || !hero || !window.ControlDeskPixels) return;
 
   const configKey = "teaflow-motion";
   let preferences = { enabled: true, speed: 1, spacing: 7 };
@@ -12,29 +11,33 @@
   let lastDraw = 0;
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)"),
     color = () => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#32f08c";
+  let worker=null,renderer=null,lastWorkerState='',transferred=false;
+  function fallback() {
+    worker?.terminate();worker=null;
+    const replacement=canvas.cloneNode(false);
+    canvas.replaceWith(replacement);canvas=replacement;
+    renderer=new ControlDeskPixels(canvas);resize();requestDraw();
+  }
+  try {
+    if (!canvas.transferControlToOffscreen || !window.Worker) throw new Error('Worker canvas unavailable');
+    worker=new Worker(new URL('pixel-field.js',document.currentScript.src));
+    const offscreen=canvas.transferControlToOffscreen();
+    transferred=true;
+    worker.postMessage({canvas:offscreen},[offscreen]);
+    worker.addEventListener('error',event=>{event.preventDefault();fallback()},{once:true});
+  } catch {
+    if(transferred)fallback();
+    else{worker?.terminate();worker=null;renderer=new ControlDeskPixels(canvas)}
+  }
 
   function resize() {
     const box = hero.getBoundingClientRect();
     width = box.width;
     height = box.height;
     dpr = Math.min(devicePixelRatio || 1, 1.5);
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  function field(x, y, time) {
-    const u = x / width, v = y / height;
-    const warp = .1 * Math.sin(u * 8 + v * 5 + time * .3) + .06 * Math.sin(v * 14 - u * 7 - time * .24);
-    const ridge = .64 + .17 * Math.sin(u * 6 - .9 + time * .35) + warp;
-    const band = Math.exp(-(((v - ridge) / .19) ** 2));
-    const leftCloud = Math.exp(-(((u + .03 + .06 * Math.sin(v * 8 + time * .2)) / .32) ** 2) - ((v - .38) / .43) ** 2);
-    const rightCloud = .6 * Math.exp(-(((u - 1.02) / .16) ** 2) - ((v - .08 - .07 * Math.sin(time * .3)) / .18) ** 2);
-    const grain = .62 + .38 * Math.sin(x * .019 + y * .025 + Math.sin(y * .013 - time * .4) * 2);
-    const hollow = 1 - .9 * Math.exp(-(((u - .64) / .29) ** 2) - ((v - .28) / .24) ** 2);
-    return Math.max(band, leftCloud, rightCloud) * (.6 + .4 * grain) * hollow;
+    renderer?.resize(width,height,dpr);
   }
 
   function draw(now) {
@@ -42,29 +45,18 @@
     if (!preferences.enabled || document.hidden || hero.getBoundingClientRect().bottom < 0 || hero.getBoundingClientRect().top > innerHeight) return;
     if (now - lastDraw < 32) { frame = requestAnimationFrame(draw); return; }
     lastDraw = now;
-    const time = reducedMotion.matches ? 0 : now * .0003 * preferences.speed;
-    const accent = color();
-    const rgb = /^#[a-f0-9]{6}$/i.test(accent) ? [1, 3, 5].map(i => parseInt(accent.slice(i, i + 2), 16)) : [50, 240, 140];
-    const spacing = Number(preferences.spacing) || 7;
-    const cell = spacing * (width > 1000 ? 1 : 1.1);
-    context.clearRect(0, 0, width, height);
-    for (let y = 12; y < height; y += cell) {
-      for (let x = 3; x < width; x += cell) {
-        const amount = field(x, y, time);
-        const flicker = .65 + .35 * Math.sin((x * .021) + (y * .057) + time * 2.1);
-        const grain = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
-        const scatter = grain - Math.floor(grain);
-        const opacity = Math.min(.82, Math.max(0, (amount - .16 - scatter * .25) * 1.3 * flicker));
-        if (opacity < .035) continue;
-        const green = Math.sin(x * .014 + y * .023 + time * .4) > .35 && scatter > .35;
-        context.fillStyle = green ? `rgba(${rgb.map(c => Math.round(c * .65)).join(",")},${opacity * .7})` : `rgba(183,190,186,${opacity * .8})`;
-        context.fillRect(Math.round(x), Math.round(y), Math.max(2, cell - 2), Math.max(2, cell - 2));
-      }
-    }
+    renderer?.paint(now,preferences,color(),reducedMotion.matches);
     if (!reducedMotion.matches) frame = requestAnimationFrame(draw);
   }
 
   function requestDraw() {
+    if (worker) {
+      const box=hero.getBoundingClientRect();
+      const state={width,height,dpr,preferences,accent:color(),reduced:reducedMotion.matches,visible:!document.hidden&&box.width>0&&box.height>0&&box.bottom>=0&&box.top<=innerHeight};
+      const signature=JSON.stringify(state);
+      if(signature!==lastWorkerState){lastWorkerState=signature;worker.postMessage(state)}
+      return;
+    }
     if (!frame) frame = requestAnimationFrame(draw);
   }
 
@@ -75,9 +67,10 @@
 
   const scenarioNames = [
     ["baseline", "完整调度", "动态优先级与抢占", "↗"],
+    ["fcfs", "FCFS 调度", "先到先服务与编号并列规则", "F"],
     ["no_dynamic", "静态调度", "固定顺序完成任务", "01"],
     ["no_deadlock", "关闭死锁保护", "观察资源冲突处理", "◇"],
-    ["non_preemptive", "非抢占调度", "任务开始后连续执行", "Ⅱ"],
+    ["non_preemptive", "非抢占调度", "步骤内连续执行，故障仍暂停", "Ⅱ"],
     ["compare", "调度策略对比", "并排查看实验结果", "⇄"],
     ["deadlock", "死锁避免与恢复", "比较三种处理策略", "⌘"],
   ];
@@ -150,6 +143,7 @@
   topButton.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   document.addEventListener("visibilitychange", requestDraw);
   reducedMotion.addEventListener?.("change", requestDraw);
+  document.addEventListener('teaflow:config',requestDraw);
   $("#closeSettings")?.addEventListener("click", requestDraw);
 
   function syncMotionInputs() {

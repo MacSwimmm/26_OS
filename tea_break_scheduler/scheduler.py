@@ -1,395 +1,492 @@
-"""Discrete-time scheduler with staged resource requests and recovery."""
-
+"""Deterministic event loop: a snapshot at t describes the boundary before [t,t+1)."""
 from __future__ import annotations
 
+import hashlib
+import json
+from copy import deepcopy
 from dataclasses import asdict
+from types import MappingProxyType
 from typing import Callable, Iterable
 
 from .deadlock import build_wait_for_graph, choose_recovery_victim, find_cycles
 from .models import Interrupt, InterruptType, Metrics, SchedulerConfig, Task, TaskState
+from .policies import order_tasks, selection_reason
 from .resources import ResourceManager
 
 
 class Scheduler:
     def __init__(self, tasks: Iterable[Task], resources, config: SchedulerConfig | None = None,
                  interrupts: Iterable[Interrupt] = ()) -> None:
-        task_list = list(tasks)
-        self.tasks: dict[str, Task] = {task.task_id: task for task in task_list}
+        task_list = deepcopy(list(tasks))
+        self.tasks = {task.task_id: task for task in task_list}
         if len(self.tasks) != len(task_list):
             raise ValueError("task ids must be unique")
-        self._validate_dependencies()
-        self.config = config or SchedulerConfig()
-        self.resource_manager = ResourceManager(resources, self.config.banker_enabled)
-        self.interrupts = sorted(interrupts, key=lambda event: event.at)
+        self.config = deepcopy(config or SchedulerConfig())
+        self.interrupts = sorted(deepcopy(list(interrupts)), key=lambda e: e.at)
+        self.resource_manager = ResourceManager(deepcopy(resources), self.config.banker_enabled)
+        self._validate_inputs()
+        from .scenario_io import scenario_document
+        self.input_document = scenario_document(self.tasks.values(), resources, self.config, self.interrupts)
         self.interrupt_index = 0
         self.running: list[str] = []
         self.waiting_requests: dict[str, dict[str, int]] = {}
         self.time = 0
-        self.metrics = Metrics(
-            total_tasks=len(self.tasks),
-            urgent_tasks=sum(1 for task in self.tasks.values() if task.urgent),
-        )
+        names = [r for r, resource in resources.items() if not resource.shared]
+        self.metrics = Metrics(**{field: dict.fromkeys(names, 0) for field in (
+            "resource_busy_ticks", "resource_held_ticks", "resource_available_ticks",
+            "resource_outage_ticks", "resource_outage_held_ticks")})
         self.trace: list[dict] = []
         self._active_cycles: set[tuple[str, ...]] = set()
         self._paused_until: dict[str, int] = {}
-        self._response_times: list[int] = []
-        self._initial_order = {task_id: index for index, task_id in enumerate(self.static_schedule())}
-        if self.config.max_time <= 0 or self.config.detection_period <= 0:
-            raise ValueError("max_time and detection_period must be positive")
-        if self.config.workers <= 0:
-            raise ValueError("workers must be positive")
+        self._wait_keys: dict[str, tuple] = {}
+        self._seen_cups: set[str] = set()
+        self._arrived: set[str] = set()
+        self._outages: set[str] = {name for name, r in resources.items() if r.blocked_until > 0}
+        self._has_run = False
+        self.request_board = MappingProxyType({})
+        self._initial_order = {tid: i for i, tid in enumerate(self.static_schedule())}
 
-    def _validate_dependencies(self) -> None:
-        for task in self.tasks.values():
-            unknown = set(task.dependencies) - self.tasks.keys()
-            if unknown:
-                raise ValueError(f"task {task.task_id} has unknown dependencies: {sorted(unknown)}")
+    def _validate_inputs(self) -> None:
+        resources = self.resource_manager.resources
+        if any(name != resource.name for name, resource in resources.items()):
+            raise ValueError("resource map key must match resource.name")
+        known = dict(self.tasks)
+        cups: set[str] = set()
+        for event in self.interrupts:
+            if event.resource and event.resource not in resources:
+                raise ValueError(f"unknown interrupted resource: {event.resource}")
+            if event.resource and resources[event.resource].shared:
+                raise ValueError("read-only shared data is not a faultable mutex resource")
+            if event.task is None:
+                continue
+            if event.kind == InterruptType.CUP_TAKEN and event.cup_id in cups:
+                continue
+            if event.kind == InterruptType.CUP_TAKEN:
+                cups.add(event.cup_id)
+            task = event.task
+            if task.task_id in known:
+                raise ValueError(f"duplicate task id from event: {task.task_id}")
+            task.submitted_at = task.arrival_time = event.at
+            known[task.task_id] = task
+        for event in self.interrupts:
+            if event.target_task_id and event.target_task_id not in known:
+                raise ValueError(f"unknown interrupt target: {event.target_task_id}")
+        for task in known.values():
+            if task.state != TaskState.PENDING or task.stage_index or task.completed_work:
+                raise ValueError("scheduler input must contain fresh tasks")
+            if set(task.dependencies) - known.keys():
+                raise ValueError(f"task {task.task_id} has unknown dependencies")
+            for name, amount in task.max_claim.items():
+                if name not in resources:
+                    raise ValueError(f"unknown resource: {name}")
+                if amount > resources[name].capacity:
+                    raise ValueError(f"max_claim exceeds resource capacity: {name}")
+            held: dict[str, int] = {}
+            for stage in task.stages:
+                held.update(stage.resources)
+                if set(stage.release_resources) - held.keys():
+                    raise ValueError("stage releases a resource it cannot hold")
+                for name in stage.release_resources:
+                    held.pop(name, None)
         visiting: set[str] = set()
         visited: set[str] = set()
 
-        def visit(task_id: str) -> None:
-            if task_id in visiting:
+        def visit(tid: str) -> None:
+            if tid in visiting:
                 raise ValueError("task dependency graph contains a cycle")
-            if task_id in visited:
+            if tid in visited:
                 return
-            visiting.add(task_id)
-            for dep in self.tasks[task_id].dependencies:
+            visiting.add(tid)
+            for dep in known[tid].dependencies:
                 visit(dep)
-            visiting.remove(task_id)
-            visited.add(task_id)
-
-        for task_id in self.tasks:
-            visit(task_id)
+            visiting.remove(tid)
+            visited.add(tid)
+        for tid in known:
+            visit(tid)
 
     def static_schedule(self) -> list[str]:
-        return [task.task_id for task in sorted(
-            (t for t in self.tasks.values() if t.submitted_at == 0),
-            key=lambda task: (-task.priority, task.deadline, task.submitted_at, task.task_id),
-        )]
+        return [t.task_id for t in order_tasks(
+            [t for t in self.tasks.values() if t.submitted_at == 0], self.config.policy)]
 
     def _dependencies_ready(self, task: Task) -> bool:
-        return all(self.tasks[dep].state == TaskState.COMPLETED for dep in task.dependencies)
+        return all(dep in self.tasks and self.tasks[dep].state == TaskState.COMPLETED
+                   for dep in task.dependencies)
 
     def _ready_tasks(self) -> list[Task]:
-        candidates = [task for task in self.tasks.values()
-                     if task.state in (TaskState.PENDING, TaskState.READY, TaskState.BLOCKED)
-                     and task.submitted_at <= self.time and self._dependencies_ready(task)]
-        if not self.config.dynamic_rescheduling:
-            return sorted(candidates, key=lambda task: (
-                self._initial_order.get(task.task_id, len(self._initial_order) + task.submitted_at),
-                task.submitted_at, task.task_id,
-            ))
-        return sorted(
-            candidates,
-            key=lambda task: (-int(task.urgent), -task.priority, task.deadline,
-                              task.submitted_at, task.task_id),
-        )
+        candidates = [t for t in self.tasks.values() if t.state == TaskState.READY]
+        if self.config.dynamic_rescheduling:
+            return order_tasks(candidates, self.config.policy)
+        return sorted(candidates, key=lambda t: (
+            (0, self._initial_order[t.task_id], "") if t.task_id in self._initial_order
+            else (1, t.submitted_at, t.task_id)))
 
-    def _record(self, event: str, **data) -> None:
-        self.trace.append({"time": self.time, "event": event, **data})
+    def _record(self, event: str, *, at: int | None = None, **data) -> None:
+        self.trace.append({"time": self.time if at is None else at, "event": event, **data})
 
-    def _pause(self, task: Task, reason: str, resume_at: int) -> None:
+    def _desired_resources(self, task: Task) -> dict[str, int]:
+        if not task.stages:
+            return dict(task.resources)
+        # Retained resources from previous stages must be reacquired after a
+        # scheduling preemption, even when the current stage only names a new one.
+        desired: dict[str, int] = {}
+        for stage in task.stages[:task.stage_index]:
+            desired.update(stage.resources)
+            for name in stage.release_resources:
+                desired.pop(name, None)
+        if task.current_stage:
+            desired.update(task.current_stage.resources)
+        if task.retry_count:
+            # Recovery takes a sorted, atomic reservation of Max until completion.
+            # It never holds a partial retry request while waiting for another.
+            desired.update(task.max_claim)
+        return dict(sorted(desired.items()))
+
+    def _requested_resources(self, task: Task) -> dict[str, int]:
+        held = self.resource_manager.allocation.get(task.task_id, {})
+        return {name: amount - held.get(name, 0)
+                for name, amount in self._desired_resources(task).items()
+                if amount > held.get(name, 0)}
+
+    def _pause(self, task: Task, reason: str, resume_at: int, *, release: bool = False) -> None:
         if task.task_id in self.running:
             self.running.remove(task.task_id)
         task.saved_remaining = task.remaining
         task.state = TaskState.PAUSED
-        self.resource_manager.release(task.task_id)
+        task.waiting_reason = reason
+        saved_resources = dict(self.resource_manager.allocation.get(task.task_id, {}))
+        if release:
+            self.resource_manager.release(task.task_id)
         self.waiting_requests.pop(task.task_id, None)
-        self._paused_until[task.task_id] = resume_at
-        self._record("pause", task_id=task.task_id, reason=reason,
-                     remaining=task.remaining, resume_at=resume_at)
+        self._wait_keys.pop(task.task_id, None)
+        self._paused_until[task.task_id] = max(self._paused_until.get(task.task_id, 0), resume_at)
+        self._record("pause", task_id=task.task_id, reason=reason, remaining=task.remaining,
+                     stage_index=task.stage_index, resume_at=resume_at,
+                     saved_resources=saved_resources, resources_released=release)
 
-    def _preempt_for_urgent(self, urgent: Task) -> None:
-        stage = urgent.current_stage
-        desired = stage.resources if stage is not None else urgent.resources
-        occupied = self.resource_manager.allocation
-        candidates = [self.tasks[tid] for tid in self.running
-                      if self.tasks[tid].preemptible and
-                      (self.tasks[tid].current_stage is None or self.tasks[tid].current_stage.preemptible)
-                      and (len(self.running) >= self.config.workers or any(
-                          amount > 0 and occupied.get(tid, {}).get(resource, 0) > 0
-                          for resource, amount in desired.items()))]
-        if not candidates:
+    def _preempt_for(self, incoming: Task) -> None:
+        if (not self.config.dynamic_rescheduling or not self.config.preemptive
+                or self.config.policy != "priority"):
             return
-        victim = min(candidates, key=lambda task: (task.priority, task.urgent, -int(task.remaining or 0)))
-        if (len(self.running) >= self.config.workers or any(
-            amount > 0 and occupied.get(victim.task_id, {}).get(resource, 0) > 0
-            for resource, amount in desired.items())) and (victim.priority < urgent.priority or not victim.urgent):
-            self._preempt(victim, f"preempted by {urgent.task_id}")
-
-    def _preempt(self, task: Task, reason: str) -> None:
-        if task.task_id not in self.running:
+        desired = self._desired_resources(incoming)
+        if incoming.urgent:
+            desired.update(incoming.max_claim)
+        if any(self.time < self.resource_manager.resources[r].blocked_until for r in desired):
             return
-        self._pause(task, reason, self.time)
-        task.state = TaskState.READY
-        task.preemptions += 1
-        self.metrics.preemptions += 1
-        self._paused_until.pop(task.task_id, None)
-        self._record("preempt", task_id=task.task_id, reason=reason,
-                     remaining=task.remaining, progress_preserved=True)
-
-    def _resume_ready_tasks(self) -> None:
-        for task_id, resume_at in list(self._paused_until.items()):
-            task = self.tasks[task_id]
-            stage = task.current_stage
-            resources = stage.resources if stage is not None else task.resources
-            resources_ready = all(
-                self.time >= self.resource_manager.resources[name].blocked_until
-                for name in resources if name in self.resource_manager.resources
-            )
-            if self.time >= resume_at and resources_ready:
-                task.state = TaskState.READY
-                self._paused_until.pop(task_id)
-                self._record("resume_ready", task_id=task_id,
-                             remaining=task.remaining, stage_index=task.stage_index)
+        owners = [self.tasks[tid] for tid, held in self.resource_manager.allocation.items()
+                  if tid != incoming.task_id and set(held) & set(desired)]
+        eligible = lambda t: (t.task_id in self.running and t.priority < incoming.priority
+                             and t.preemptible and (t.current_stage is None or t.current_stage.preemptible))
+        # Do not disturb unrelated work if the incoming task still cannot run.
+        if any(not eligible(t) for t in owners):
+            return
+        victims = list(owners)
+        if self.config.workers is not None and len(self.running) - len(victims) >= self.config.workers:
+            others = [self.tasks[tid] for tid in self.running
+                      if eligible(self.tasks[tid]) and self.tasks[tid] not in victims]
+            if not others:
+                return
+            victims.append(min(others, key=lambda t: (t.priority, t.task_id)))
+        for victim in victims:
+            self._pause(victim, f"preempted by {incoming.task_id}", self.time, release=True)
+            victim.preemptions += 1
+            self.metrics.preemptions += 1
+            self._record("preempt", task_id=victim.task_id, by=incoming.task_id,
+                         remaining=victim.remaining, progress_preserved=True)
 
     def _apply_interrupts(self) -> None:
         while self.interrupt_index < len(self.interrupts) and self.interrupts[self.interrupt_index].at <= self.time:
             event = self.interrupts[self.interrupt_index]
             self.interrupt_index += 1
             self._record("interrupt", kind=event.kind.value, description=event.description)
-            if event.kind == InterruptType.URGENT and event.task is not None:
-                if event.task.task_id in self.tasks:
-                    raise ValueError(f"duplicate task id from interrupt: {event.task.task_id}")
-                event.task.submitted_at = self.time
-                event.task.arrival_time = self.time
-                event.task.urgent = True
-                self.tasks[event.task.task_id] = event.task
-                self.metrics.total_tasks += 1
-                self.metrics.urgent_tasks += 1
-                self._record("urgent_submitted", task_id=event.task.task_id)
-                if self.config.dynamic_rescheduling and self.config.preemptive:
-                    self._preempt_for_urgent(event.task)
+            if event.kind in (InterruptType.REQUEST, InterruptType.URGENT, InterruptType.CUP_TAKEN):
+                if event.kind == InterruptType.CUP_TAKEN:
+                    if event.cup_id in self._seen_cups:
+                        self._record("duplicate_cup_ignored", cup_id=event.cup_id)
+                        continue
+                    self._seen_cups.add(event.cup_id)
+                task = event.task
+                if event.kind == InterruptType.URGENT:
+                    task.urgent = True
+                self.tasks[task.task_id] = task
+                self._record("urgent_submitted" if task.urgent else "request_submitted", task_id=task.task_id)
             elif event.kind in (InterruptType.ENVIRONMENT, InterruptType.FAULT):
-                resume_at = event.end_at if event.end_at is not None else self.time + max(1, event.duration)
-                resource_name = event.resource
-                if resource_name:
-                    if resource_name not in self.resource_manager.resources:
-                        raise ValueError(f"unknown interrupted resource: {resource_name}")
-                    resource = self.resource_manager.resources[resource_name]
-                    resource.blocked_until = max(resource.blocked_until, resume_at)
-                    self._record("resource_blocked", resource=resource_name, until=resource.blocked_until)
-                    affected = [task for task in self.tasks.values()
-                                if task.state == TaskState.RUNNING
-                                and resource_name in (task.current_stage.resources if task.current_stage else task.resources)]
+                until = event.end_at if event.end_at is not None else self.time + event.duration
+                if event.resource:
+                    resource = self.resource_manager.resources[event.resource]
+                    resource.blocked_until = max(resource.blocked_until, until)
+                    self._outages.add(event.resource)
+                    self._record("resource_blocked", resource=event.resource, until=resource.blocked_until)
+                    affected = [t for t in self.tasks.values() if t.submitted_at <= self.time and not t.is_finished
+                                and (event.resource in self.resource_manager.allocation.get(t.task_id, {})
+                                     or (t.task_id in self.running and event.resource in self._desired_resources(t)))]
                 else:
-                    target = self.tasks.get(event.target_task_id or "")
-                    affected = [target] if target is not None and target.task_id in self.running else []
+                    target = self.tasks.get(event.target_task_id)
+                    affected = [target] if target and target.submitted_at <= self.time and not target.is_finished else []
                 for task in affected:
-                    self._pause(task, "fault interruption" if event.kind == InterruptType.FAULT
-                                else "environment interruption", resume_at)
-            elif event.kind == InterruptType.RESTORE and event.resource:
-                if event.resource not in self.resource_manager.resources:
-                    raise ValueError(f"unknown restored resource: {event.resource}")
-                resource = self.resource_manager.resources[event.resource]
-                resource.blocked_until = min(resource.blocked_until, self.time)
-                for task_id in self._paused_until:
-                    task = self.tasks[task_id]
-                    stage = task.current_stage
-                    needed = stage.resources if stage is not None else task.resources
-                    if event.resource in needed:
-                        self._paused_until[task_id] = min(self._paused_until[task_id], self.time)
-                self._record("resource_restored", resource=event.resource)
+                    self._pause(task, f"{event.kind.value} interruption",
+                                self.time if event.resource else until)
+            elif event.kind == InterruptType.RESTORE:
+                self.resource_manager.resources[event.resource].blocked_until = self.time
+        for name in sorted(self._outages):
+            if self.resource_manager.resources[name].blocked_until <= self.time:
+                self._outages.remove(name)
+                self._record("resource_restored", resource=name)
 
-    def _requested_resources(self, task: Task) -> dict[str, int]:
-        stage = task.current_stage
-        desired = stage.resources if stage is not None else task.resources
-        held = self.resource_manager.allocation.get(task.task_id, {})
-        return {name: amount - held.get(name, 0)
-                for name, amount in desired.items() if amount > held.get(name, 0)}
+    def _update_ready(self) -> None:
+        for task in self.tasks.values():
+            if task.submitted_at > self.time or task.is_finished or task.state == TaskState.RUNNING:
+                continue
+            if task.task_id not in self._arrived:
+                self._arrived.add(task.task_id)
+                self._record("arrival", task_id=task.task_id)
+            if task.state == TaskState.PAUSED:
+                names = set(self._desired_resources(task)) | set(self.resource_manager.allocation.get(task.task_id, {}))
+                if self.time < self._paused_until[task.task_id] or any(
+                        self.time < self.resource_manager.resources[r].blocked_until for r in names):
+                    continue
+                self._paused_until.pop(task.task_id)
+                self._record("resume_ready", task_id=task.task_id,
+                             remaining=task.remaining, stage_index=task.stage_index)
+            if not self._dependencies_ready(task):
+                task.state = TaskState.BLOCKED
+                if task.waiting_reason != "dependency":
+                    self._record("dependency_wait", task_id=task.task_id, dependencies=task.dependencies)
+                task.waiting_reason = "dependency"
+            else:
+                task.state = TaskState.READY
+        self.request_board = MappingProxyType({tid: MappingProxyType({
+            "name": t.name, "state": t.state.value, "priority": t.priority})
+            for tid, t in self.tasks.items() if t.submitted_at <= self.time})
 
     def _start_tasks(self) -> None:
         for task in self._ready_tasks():
-            if len(self.running) >= self.config.workers:
-                break
-            request = self._requested_resources(task)
-            result = self.resource_manager.try_acquire(task, self.tasks, self.time, request)
-            if not result.granted:
-                task.state = TaskState.BLOCKED
-                previous_request = self.waiting_requests.get(task.task_id)
-                self.waiting_requests[task.task_id] = request
-                new_wait = previous_request != request
-                self.metrics.conflicts += int(new_wait and result.reason == "resource unavailable")
-                self.metrics.safety_rejections += int(new_wait and "safety" in result.reason.lower())
-                self._record("resource_wait", task_id=task.task_id,
-                             reason=result.reason, request=request)
+            self._preempt_for(task)
+            if self.config.workers is not None and len(self.running) >= self.config.workers:
+                task.waiting_reason = "worker capacity"
                 continue
+            desired = self._desired_resources(task)
+            request = self._requested_resources(task)
+            if any(self.time < self.resource_manager.resources[r].blocked_until for r in desired):
+                granted, reason = False, "resource outage"
+            else:
+                result = self.resource_manager.try_acquire(task, self.tasks, self.time, request)
+                granted, reason = result.granted, result.reason
+            if not granted:
+                task.state = TaskState.BLOCKED
+                task.waiting_reason = reason
+                # Only ownership conflicts form request edges; outages and Banker
+                # rejections must not produce a fictitious resource deadlock.
+                if reason == "resource occupied":
+                    self.waiting_requests[task.task_id] = request
+                else:
+                    self.waiting_requests.pop(task.task_id, None)
+                key = (reason, tuple(sorted(request.items())))
+                if self._wait_keys.get(task.task_id) != key:
+                    self.metrics.conflicts += int(reason == "resource occupied")
+                    self.metrics.safety_rejections += int("safety" in reason.lower())
+                    self._record("resource_wait", task_id=task.task_id, reason=reason, request=request)
+                self._wait_keys[task.task_id] = key
+                continue
+            resumed = task.saved_remaining is not None
             task.state = TaskState.RUNNING
+            task.waiting_reason = ""
             task.started_at = self.time if task.started_at is None else task.started_at
             self.running.append(task.task_id)
             self.waiting_requests.pop(task.task_id, None)
-            self._record("start" if task.stage_index == 0 else "stage_start",
-                         task_id=task.task_id,
-                         stage=task.current_stage.name if task.current_stage else task.name,
-                         stage_index=task.stage_index,
-                         acquired=request)
+            self._wait_keys.pop(task.task_id, None)
+            self._record("resume" if resumed else "start" if task.stage_index == 0 else "stage_start",
+                         task_id=task.task_id, stage=task.current_stage.name if task.current_stage else task.name,
+                         stage_index=task.stage_index, acquired=request,
+                         remaining=task.remaining, reason=selection_reason(self.config.policy)
+                         if self.config.dynamic_rescheduling else "static initial order; later arrivals appended")
+            task.saved_remaining = None
 
     def _finish_tasks(self) -> None:
-        for task_id in list(self.running):
-            task = self.tasks[task_id]
-            task.remaining = int(task.remaining or 0) - 1
+        for tid in list(self.running):
+            task = self.tasks[tid]
+            task.remaining -= 1
             task.completed_work += 1
+            if task.redo_remaining:
+                task.redo_remaining -= 1
+                task.redone_work += 1
+                self.metrics.redo_work += 1
+            if task.remaining:
+                continue
             stage = task.current_stage
-            if task.remaining > 0:
-                continue
-            if stage is None:
-                self._complete_task(task)
-                continue
-            for name in stage.release_resources:
-                held = self.resource_manager.allocation.get(task_id, {})
-                if name in held:
-                    held.pop(name)
-            if not self.resource_manager.allocation.get(task_id):
-                self.resource_manager.release(task_id)
-            task.stage_index += 1
-            if task.stage_index >= len(task.stages):
-                self._complete_task(task)
+            if stage:
+                if not task.retry_count:
+                    self.resource_manager.release(tid, stage.release_resources)
+                task.stage_index += 1
+            if stage is None or task.stage_index == len(task.stages):
+                task.state = TaskState.COMPLETED
+                task.finished_at = self.time + 1
+                self.running.remove(tid)
+                self.resource_manager.release(tid)
+                self._record("complete", at=task.finished_at, task_id=tid,
+                             response_time=task.response_time, lateness=task.completion_delay)
             else:
                 task.remaining = task.current_stage.duration
                 task.state = TaskState.READY
-                self.running.remove(task_id)
-                self._record("stage_complete", task_id=task_id,
-                             completed_stage=stage.name, next_stage=task.current_stage.name)
-
-    def _complete_task(self, task: Task) -> None:
-        task.state = TaskState.COMPLETED
-        task.finished_at = self.time + 1
-        if task.task_id in self.running:
-            self.running.remove(task.task_id)
-        self.resource_manager.release(task.task_id)
-        self.waiting_requests.pop(task.task_id, None)
-        self.metrics.completed_tasks += 1
-        self.metrics.total_delay += task.completion_delay
-        self._response_times.append(int(task.response_time or 0))
-        self._record("complete", task_id=task.task_id,
-                     response_time=task.response_time, lateness=task.completion_delay)
+                self.running.remove(tid)
+                if not self.resource_manager.allocation.get(tid):
+                    task.checkpoint = task.stage_index
+                self._record("stage_complete", at=self.time + 1, task_id=tid,
+                             completed_stage=stage.name, next_stage=task.current_stage.name,
+                             released=stage.release_resources if not task.retry_count else [],
+                             checkpoint=task.checkpoint)
 
     def _detect_and_recover(self) -> None:
         if not self.config.deadlock_detection or self.time % self.config.detection_period:
             return
         graph = build_wait_for_graph(self.resource_manager.allocation, self.waiting_requests)
         cycles = find_cycles(graph)
-        current = {tuple(cycle) for cycle in cycles}
-        self._active_cycles.intersection_update(current)
-        new_cycles = [cycle for cycle in cycles if tuple(cycle) not in self._active_cycles]
-        if not cycles:
-            return
-        if new_cycles:
-            self.metrics.deadlocks += len(new_cycles)
-            self._record("deadlock_detected", cycles=new_cycles)
-            self._active_cycles.update(tuple(cycle) for cycle in new_cycles)
+        keyed = {tuple(sorted(cycle)): cycle for cycle in cycles}
+        new = {key: cycle for key, cycle in keyed.items() if key not in self._active_cycles}
+        self._active_cycles = set(keyed)
+        if new:
+            self.metrics.deadlocks += len(new)
+            self._record("deadlock_detected", cycles=list(new.values()),
+                         graph={tid: sorted(edges) for tid, edges in sorted(graph.items())})
         if not self.config.deadlock_recovery:
             return
-        for cycle in new_cycles:
+        for key, cycle in sorted(new.items()):
+            remaining = find_cycles(build_wait_for_graph(self.resource_manager.allocation, self.waiting_requests))
+            if key not in {tuple(sorted(c)) for c in remaining}:
+                continue
             eligible = [tid for tid in cycle if self.tasks[tid].rollback_allowed]
             if not eligible:
                 self._record("deadlock_unresolved", cycle=cycle, reason="no rollback-eligible task")
                 continue
-            victim_id = choose_recovery_victim(self.tasks, eligible)
-            victim = self.tasks[victim_id]
-            if victim.retry_count >= victim.max_retries:
-                self._cancel_task(victim_id, "maximum rollback retries exceeded")
-                self.metrics.recoveries += 1
-                self._record("rollback_limit", task_id=victim_id,
-                             retry_count=victim.retry_count)
-                continue
-            released = dict(self.resource_manager.allocation.get(victim_id, {}))
-            if victim.task_id in self.running:
-                self.running.remove(victim.task_id)
-            self.resource_manager.release(victim_id)
-            self.waiting_requests.pop(victim_id, None)
-            checkpoint_work = sum(stage.duration for stage in victim.stages[:victim.checkpoint])
-            lost_work = max(0, victim.completed_work - checkpoint_work)
-            victim.rolled_back_work += lost_work
-            self.metrics.rollback_work += lost_work
-            self.metrics.rollback_count += 1
-            victim.retry_count += 1
-            victim.completed_work = checkpoint_work
-            victim.stage_index = victim.checkpoint if victim.stages else 0
-            victim.remaining = (victim.current_stage.duration if victim.current_stage
-                                else victim.duration - checkpoint_work)
-            victim.state = TaskState.READY
+            tid = choose_recovery_victim(self.tasks, eligible)
+            task = self.tasks[tid]
+            released = dict(self.resource_manager.allocation.get(tid, {}))
+            self.resource_manager.release(tid)
+            self.waiting_requests.pop(tid, None)
+            self._wait_keys.pop(tid, None)
+            if tid in self.running:
+                self.running.remove(tid)
             self.metrics.recoveries += 1
-            self._active_cycles.discard(tuple(cycle))
-            self._record("rollback", task_id=victim_id, reason="lowest-priority rollback-eligible task",
-                         lost_work=lost_work, retry_count=victim.retry_count,
-                         released=released)
+            if task.retry_count >= task.max_retries:
+                task.state = TaskState.CANCELLED
+                task.finished_at = self.time
+                task.waiting_reason = "maximum rollback retries exceeded"
+                self._record("cancel", task_id=tid, reason=task.waiting_reason, released=released)
+                continue
+            checkpoint_work = sum(s.duration for s in task.stages[:task.checkpoint])
+            lost = task.completed_work - checkpoint_work
+            task.rolled_back_work += lost
+            task.redo_remaining = lost
+            task.completed_work = checkpoint_work
+            task.stage_index = task.checkpoint
+            task.remaining = task.current_stage.duration if task.current_stage else task.duration
+            task.retry_count += 1
+            task.state = TaskState.READY
+            task.waiting_reason = "rollback retry: atomic ordered reservation"
+            self.metrics.rollback_count += 1
+            self.metrics.rollback_work += lost
+            self._record("rollback", task_id=tid, lost_work=lost, released=released,
+                         checkpoint=task.checkpoint, retry_count=task.retry_count,
+                         reason="lowest priority, least checkpoint redo cost, task id",
+                         retry_resource_order=sorted(task.max_claim))
 
     def _account_resources(self) -> None:
-        busy_count = 0
-        capacity_count = 0
         for name, resource in self.resource_manager.resources.items():
-            if self.time >= resource.blocked_until:
-                self.metrics.resource_available_ticks[name] = self.metrics.resource_available_ticks.get(name, 0) + resource.capacity
-                capacity_count += resource.capacity
-            active = any(task_id in self.running and amount > 0
-                         for task_id, held in self.resource_manager.allocation.items()
-                         for held_name, amount in held.items() if held_name == name)
-            if active:
-                self.metrics.resource_busy_ticks[name] = self.metrics.resource_busy_ticks.get(name, 0) + 1
-                busy_count += 1
-        self.metrics.busy_ticks += busy_count
-        self.metrics.resource_capacity_ticks += capacity_count
+            if resource.shared:
+                continue
+            held = any(values.get(name, 0) for values in self.resource_manager.allocation.values())
+            if self.time < resource.blocked_until:
+                self.metrics.resource_outage_ticks[name] += 1
+                self.metrics.resource_outage_held_ticks[name] += int(held)
+                continue
+            self.metrics.resource_available_ticks[name] += 1
+            self.metrics.resource_held_ticks[name] += int(held)
+            active = any(name in (self.tasks[tid].current_stage.resources if self.tasks[tid].current_stage
+                                  else self.tasks[tid].resources) for tid in self.running)
+            self.metrics.resource_busy_ticks[name] += int(active)
+
+    def _refresh_metrics(self, end: int) -> None:
+        arrived = [t for t in self.tasks.values() if t.submitted_at <= self.time]
+        completed = [t for t in arrived if t.state == TaskState.COMPLETED]
+        self.metrics.total_tasks = len(arrived)
+        self.metrics.completed_tasks = len(completed)
+        self.metrics.cancelled_tasks = sum(t.state == TaskState.CANCELLED for t in arrived)
+        self.metrics.total_response = sum(t.response_time for t in completed)
+        self.metrics.total_delay = sum(t.completion_delay for t in completed)
+        self.metrics.on_time_tasks = sum(t.finished_at <= t.deadline for t in completed)
+        urgent = [t for t in arrived if t.urgent and t.deadline <= end]
+        self.metrics.urgent_tasks = len(urgent)
+        self.metrics.urgent_missed = sum(t.state != TaskState.COMPLETED or t.finished_at > t.deadline for t in urgent)
+
+    def _assert_invariants(self) -> None:
+        manager = self.resource_manager
+        if len(self.running) != len(set(self.running)):
+            raise RuntimeError("duplicate running task")
+        if any(n < 0 for n in manager.physical_available().values()):
+            raise RuntimeError("resource capacity exceeded")
+        for tid, held in manager.allocation.items():
+            task = self.tasks[tid]
+            if task.is_finished or task.submitted_at > self.time:
+                raise RuntimeError("finished or future task holds resources")
+            if any(n <= 0 or n > task.max_claim.get(r, 0) for r, n in held.items()):
+                raise RuntimeError("allocation exceeds task claim")
+        for tid in self.running:
+            task = self.tasks[tid]
+            if task.state != TaskState.RUNNING or not self._dependencies_ready(task):
+                raise RuntimeError("invalid running task")
+            for r, n in self._desired_resources(task).items():
+                if self.time < manager.resources[r].blocked_until:
+                    raise RuntimeError("running task uses an unavailable resource")
+                if not manager.resources[r].shared and manager.allocation.get(tid, {}).get(r, 0) < n:
+                    raise RuntimeError("running task lacks required resources")
 
     def run(self, progress_callback: Callable[[int, dict[str, Task], list[dict]], None] | None = None) -> dict:
-        self._record("static_order", order=self.static_schedule())
-        for task in self.tasks.values():
-            if task.submitted_at == 0:
-                task.state = TaskState.READY
-        reported_events = len(self.trace)
-        while self.time < self.config.max_time:
+        if self._has_run:
+            raise ValueError("create a new Scheduler for each run")
+        self._has_run = True
+        self._record("static_order", order=self.static_schedule(), policy=self.config.policy)
+        reported = 0
+        horizon = self.config.max_time
+        while self.time <= horizon:
             self._apply_interrupts()
-            self._resume_ready_tasks()
-            self._start_tasks()
-            self._account_resources()
-            self._detect_and_recover()
-            self._finish_tasks()
-            if progress_callback is not None:
-                new_events = self.trace[reported_events:]
-                progress_callback(self.time, self.tasks, new_events)
-                reported_events = len(self.trace)
-            all_finished = all(task.is_finished for task in self.tasks.values())
-            no_future_events = self.interrupt_index >= len(self.interrupts)
-            if all_finished and no_future_events:
+            self._update_ready()
+            relevant = [t for t in self.tasks.values() if t.submitted_at <= horizon]
+            future = any(self.time < e.at <= horizon for e in self.interrupts[self.interrupt_index:])
+            done = all(t.is_finished for t in relevant) and not future
+            if self.time == horizon or done:
+                stop_reason = "all tasks finished" if done else "max_time"
+                # Preserve the common H denominator even when execution finishes early.
+                for name, resource in self.resource_manager.resources.items():
+                    if not resource.shared:
+                        idle_available = max(0, horizon - max(self.time, resource.blocked_until))
+                        self.metrics.resource_available_ticks[name] += idle_available
+                        self.metrics.resource_outage_ticks[name] += horizon - self.time - idle_available
+                self._refresh_metrics(horizon)
+                self._record("stop", reason=stop_reason, observation_horizon=horizon)
+                if progress_callback:
+                    progress_callback(self.time, self.tasks, self.trace[reported:])
                 break
+            self._start_tasks()
+            self._detect_and_recover()
+            self._assert_invariants()
+            self._refresh_metrics(self.time)
+            if progress_callback:
+                progress_callback(self.time, self.tasks, self.trace[reported:])
+            reported = len(self.trace)
+            self._account_resources()
+            self._finish_tasks()
             self.time += 1
-        for task in self.tasks.values():
-            if task.urgent and task.deadline <= self.config.max_time and (
-                task.state != TaskState.COMPLETED or task.finished_at is None or task.finished_at > task.deadline
-            ):
-                self.metrics.urgent_missed += 1
-        self.metrics.total_tasks = sum(
-            task.submitted_at <= self.config.max_time for task in self.tasks.values()
-        )
-        self.metrics.urgent_tasks = sum(
-            task.urgent and task.submitted_at <= self.config.max_time for task in self.tasks.values()
-        )
-        stop_reason = "all tasks finished" if all(t.is_finished for t in self.tasks.values()) else "max_time"
-        self._record("stop", reason=stop_reason)
-        result_metrics = self.metrics.as_dict()
-        average_response = (
-            round(sum(self._response_times) / len(self._response_times), 4)
-            if self._response_times else None
-        )
-        result_metrics["average_response_time"] = average_response
-        result_metrics["average_completion_delay"] = average_response
-        return {
-            "metrics": result_metrics,
-            "tasks": {task_id: asdict(task) for task_id, task in self.tasks.items()},
-            "trace": self.trace,
-            "config": asdict(self.config),
-            "stop_reason": stop_reason,
-        }
-
-    def _cancel_task(self, task_id: str, reason: str) -> None:
-        task = self.tasks.get(task_id)
-        if not task or task.is_finished:
-            return
-        if task_id in self.running:
-            self.running.remove(task_id)
-        self.resource_manager.release(task_id)
-        self.waiting_requests.pop(task_id, None)
-        task.state = TaskState.CANCELLED
-        task.finished_at = self.time
-        self.metrics.cancelled_tasks += 1
-        self._record("cancel", task_id=task_id, reason=reason)
+        self._assert_invariants()
+        unfinished = {t.task_id: {"age": self.time - t.submitted_at,
+                                  "remaining_work": t.duration - t.completed_work,
+                                  "reason": t.waiting_reason or t.state.value}
+                      for t in self.tasks.values() if t.submitted_at <= horizon and not t.is_finished}
+        from .scenario_io import provenance
+        input_hash = hashlib.sha256(json.dumps(self.input_document, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        workload = {key: self.input_document[key] for key in ("tasks", "resources", "events")}
+        workload_hash = hashlib.sha256(json.dumps(workload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        return {"metrics": self.metrics.as_dict(), "tasks": {tid: asdict(t) for tid, t in self.tasks.items()},
+                "trace": self.trace, "config": asdict(self.config), "stop_reason": stop_reason,
+                "unfinished": unfinished, "observation_horizon": horizon, "elapsed_time": self.time,
+                "metadata": {**provenance(), "seed": self.input_document.get("seed"),
+                             "input_sha256": input_hash, "workload_sha256": workload_hash},
+                "input": self.input_document}

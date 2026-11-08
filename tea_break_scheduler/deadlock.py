@@ -58,6 +58,8 @@ def is_safe(state: BankerState) -> tuple[bool, list[str]]:
 def request_is_safe(state: BankerState, task_id: str, request: dict[str, int]) -> bool:
     """Banker's pre-allocation check for one resource request."""
 
+    if task_id not in state.maximum:
+        return False
     need = _need(state, task_id)
     if any(amount < 0 or amount > need.get(resource, 0) for resource, amount in request.items()):
         return False
@@ -99,7 +101,7 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     seen_keys: set[tuple[str, ...]] = set()
 
     def visit(start: str, node: str, path: list[str], active: set[str]) -> None:
-        for nxt in graph.get(node, set()):
+        for nxt in sorted(graph.get(node, set())):
             if nxt == start and len(path) > 1:
                 cycle = path[:]
                 rotations = [tuple(cycle[i:] + cycle[:i]) for i in range(len(cycle))]
@@ -110,7 +112,7 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
             elif nxt not in active and len(path) < len(graph):
                 visit(start, nxt, path + [nxt], active | {nxt})
 
-    for node in graph:
+    for node in sorted(graph):
         visit(node, node, [node], {node})
     return cycles
 
@@ -120,6 +122,8 @@ def choose_recovery_victim(tasks: dict[str, object], cycle: list[str]) -> str:
 
     def score(task_id: str) -> tuple[int, int, str]:
         task = tasks[task_id]
-        return (getattr(task, "priority", 0), -getattr(task, "remaining", 0), task_id)
+        checkpoint_work = sum(stage.duration for stage in task.stages[:task.checkpoint])
+        redo_cost = max(0, task.completed_work - checkpoint_work)
+        return (task.priority, redo_cost, task_id)
 
     return min(cycle, key=score)

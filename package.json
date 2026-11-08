@@ -1,0 +1,8 @@
+{
+  "name": "teaflow-os-dashboard",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Optional browser regression tools; the application itself uses Python standard library only.",
+  "scripts": {"test:browser": "node scripts/test_dashboard.mjs"},
+  "devDependencies": {"playwright": "1.58.2"}
+}

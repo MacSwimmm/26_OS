@@ -1,0 +1,400 @@
+{
+  "schema_version": 1,
+  "seed": null,
+  "config": {
+    "workers": null,
+    "dynamic_rescheduling": true,
+    "preemptive": true,
+    "banker_enabled": true,
+    "deadlock_detection": true,
+    "deadlock_recovery": true,
+    "max_time": 200,
+    "detection_period": 1,
+    "policy": "priority"
+  },
+  "resources": {
+    "tea_table": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    },
+    "cup_station": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    },
+    "return_station": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    },
+    "corridor": {
+      "capacity": 1,
+      "shared": false,
+      "blocked_until": 0
+    },
+    "request_board": {
+      "capacity": 1,
+      "shared": true,
+      "blocked_until": 0
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "T1",
+      "name": "递送水杯到 A 区",
+      "priority": 2,
+      "deadline": 14,
+      "duration": 4,
+      "dependencies": [],
+      "resources": {},
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [
+        {
+          "name": "取杯",
+          "duration": 1,
+          "resources": {
+            "cup_station": 1,
+            "request_board": 1
+          },
+          "release_resources": [
+            "cup_station",
+            "request_board"
+          ],
+          "preemptible": true
+        },
+        {
+          "name": "通道配送",
+          "duration": 3,
+          "resources": {
+            "corridor": 1
+          },
+          "release_resources": [
+            "corridor"
+          ],
+          "preemptible": true
+        }
+      ],
+      "max_claim": {
+        "cup_station": 1,
+        "request_board": 1,
+        "corridor": 1
+      },
+      "rollback_allowed": false,
+      "max_retries": 3,
+      "task_type": "delivery"
+    },
+    {
+      "task_id": "T2",
+      "name": "整理茶歇台",
+      "priority": 1,
+      "deadline": 18,
+      "duration": 6,
+      "dependencies": [],
+      "resources": {
+        "tea_table": 1
+      },
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [],
+      "max_claim": {
+        "tea_table": 1
+      },
+      "rollback_allowed": false,
+      "max_retries": 3,
+      "task_type": "maintenance"
+    },
+    {
+      "task_id": "T3",
+      "name": "回收后最终整理",
+      "priority": 1,
+      "deadline": 30,
+      "duration": 2,
+      "dependencies": [
+        "R1"
+      ],
+      "resources": {
+        "tea_table": 1
+      },
+      "preemptible": true,
+      "urgent": false,
+      "submitted_at": 0,
+      "stages": [],
+      "max_claim": {
+        "tea_table": 1
+      },
+      "rollback_allowed": false,
+      "max_retries": 3,
+      "task_type": "maintenance"
+    }
+  ],
+  "events": [
+    {
+      "at": 2,
+      "kind": "urgent",
+      "description": "客户临时请求送水杯",
+      "task": {
+        "task_id": "U1",
+        "name": "紧急送水杯",
+        "priority": 3,
+        "deadline": 7,
+        "duration": 2,
+        "dependencies": [],
+        "resources": {},
+        "preemptible": true,
+        "urgent": true,
+        "submitted_at": 2,
+        "stages": [
+          {
+            "name": "取杯",
+            "duration": 1,
+            "resources": {
+              "cup_station": 1,
+              "request_board": 1
+            },
+            "release_resources": [
+              "cup_station",
+              "request_board"
+            ],
+            "preemptible": true
+          },
+          {
+            "name": "通道配送",
+            "duration": 1,
+            "resources": {
+              "corridor": 1
+            },
+            "release_resources": [
+              "corridor"
+            ],
+            "preemptible": true
+          }
+        ],
+        "max_claim": {
+          "cup_station": 1,
+          "request_board": 1,
+          "corridor": 1
+        },
+        "rollback_allowed": false,
+        "max_retries": 3,
+        "task_type": "delivery"
+      },
+      "resource": null,
+      "duration": 0,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": null
+    },
+    {
+      "at": 3,
+      "kind": "fault",
+      "description": "茶歇台操作位故障",
+      "task": null,
+      "resource": "tea_table",
+      "duration": 2,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": null
+    },
+    {
+      "at": 5,
+      "kind": "environment",
+      "description": "通道临时关闭",
+      "task": null,
+      "resource": "corridor",
+      "duration": 2,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": null
+    },
+    {
+      "at": 6,
+      "kind": "cup_taken",
+      "description": "A 区杯子已取走",
+      "task": {
+        "task_id": "R1",
+        "name": "回收空杯",
+        "priority": 1,
+        "deadline": 24,
+        "duration": 4,
+        "dependencies": [],
+        "resources": {},
+        "preemptible": true,
+        "urgent": false,
+        "submitted_at": 6,
+        "stages": [
+          {
+            "name": "前往台面",
+            "duration": 1,
+            "resources": {
+              "corridor": 1
+            },
+            "release_resources": [
+              "corridor"
+            ],
+            "preemptible": true
+          },
+          {
+            "name": "台面收集",
+            "duration": 2,
+            "resources": {
+              "tea_table": 1
+            },
+            "release_resources": [],
+            "preemptible": false
+          },
+          {
+            "name": "原子转移至回收区",
+            "duration": 1,
+            "resources": {
+              "tea_table": 1,
+              "return_station": 1
+            },
+            "release_resources": [
+              "tea_table",
+              "return_station"
+            ],
+            "preemptible": false
+          }
+        ],
+        "max_claim": {
+          "corridor": 1,
+          "tea_table": 1,
+          "return_station": 1
+        },
+        "rollback_allowed": false,
+        "max_retries": 3,
+        "task_type": "recycle"
+      },
+      "resource": null,
+      "duration": 0,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": "cup-A"
+    },
+    {
+      "at": 7,
+      "kind": "cup_taken",
+      "description": "重复杯子事件应忽略",
+      "task": {
+        "task_id": "R1",
+        "name": "回收空杯",
+        "priority": 1,
+        "deadline": 25,
+        "duration": 4,
+        "dependencies": [],
+        "resources": {},
+        "preemptible": true,
+        "urgent": false,
+        "submitted_at": 7,
+        "stages": [
+          {
+            "name": "前往台面",
+            "duration": 1,
+            "resources": {
+              "corridor": 1
+            },
+            "release_resources": [
+              "corridor"
+            ],
+            "preemptible": true
+          },
+          {
+            "name": "台面收集",
+            "duration": 2,
+            "resources": {
+              "tea_table": 1
+            },
+            "release_resources": [],
+            "preemptible": false
+          },
+          {
+            "name": "原子转移至回收区",
+            "duration": 1,
+            "resources": {
+              "tea_table": 1,
+              "return_station": 1
+            },
+            "release_resources": [
+              "tea_table",
+              "return_station"
+            ],
+            "preemptible": false
+          }
+        ],
+        "max_claim": {
+          "corridor": 1,
+          "tea_table": 1,
+          "return_station": 1
+        },
+        "rollback_allowed": false,
+        "max_retries": 3,
+        "task_type": "recycle"
+      },
+      "resource": null,
+      "duration": 0,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": "cup-A"
+    },
+    {
+      "at": 8,
+      "kind": "request",
+      "description": "普通送水请求",
+      "task": {
+        "task_id": "T4",
+        "name": "递送水杯到 A 区",
+        "priority": 2,
+        "deadline": 22,
+        "duration": 4,
+        "dependencies": [],
+        "resources": {},
+        "preemptible": true,
+        "urgent": false,
+        "submitted_at": 8,
+        "stages": [
+          {
+            "name": "取杯",
+            "duration": 1,
+            "resources": {
+              "cup_station": 1,
+              "request_board": 1
+            },
+            "release_resources": [
+              "cup_station",
+              "request_board"
+            ],
+            "preemptible": true
+          },
+          {
+            "name": "通道配送",
+            "duration": 3,
+            "resources": {
+              "corridor": 1
+            },
+            "release_resources": [
+              "corridor"
+            ],
+            "preemptible": true
+          }
+        ],
+        "max_claim": {
+          "cup_station": 1,
+          "request_board": 1,
+          "corridor": 1
+        },
+        "rollback_allowed": false,
+        "max_retries": 3,
+        "task_type": "delivery"
+      },
+      "resource": null,
+      "duration": 0,
+      "target_task_id": null,
+      "end_at": null,
+      "cup_id": null
+    }
+  ]
+}

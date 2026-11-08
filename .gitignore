@@ -1,14 +1,14 @@
 __pycache__/
 *.py[cod]
 .venv/
-results/*.json
-results/*.csv
+results/
 .pytest_cache/
 .rea-runtime/
 vendor/
 
 # Local dashboard checks and REA investigation artifacts
-tests/dashboard_browser.mjs
 docs/evidence/
 docs/INTERACTION_SPEC.md
 docs/REA逆向工作流.md
+
+node_modules/

@@ -1,68 +1,70 @@
-# 茶歇服务员任务调度仿真系统
+# TeaFlow OS · 茶歇服务员任务调度
 
-本仓库对应《操作系统（Linux）》期末论文选题 4：**茶歇服务员任务调度算法研究**。项目使用纯 Python 标准库实现，能够在 Ubuntu 22.04/Linux 上直接运行，代码用于支撑论文中的建模、算法说明、对比实验和演示。
+任务 A 正在整理茶歇台，任务 B 因台面互斥等待；紧急送水任务 U 到达后，调度器决定何时让它执行，并保存、恢复被抢占任务的进度。本项目用 Python 离散时间仿真展示这个过程，以及资源竞争、故障中断、银行家避免和死锁检测与回滚。
 
-## 已覆盖的考核点
+课程《操作系统》期末项目；**Python 3.10+，运行程序只用标准库**。上位机为本地网页，通过真实调度器生成的快照回放。分工和验收依据为 [项目说明](docs/茶歇服务员任务调度项目说明.md)。
 
-- 任务结构体：优先级、截止时间、执行时长、前置依赖、资源需求、是否可抢占、状态和剩余时间。
-- 资源竞争：茶歇台、取杯区、回收区、通行通道等互斥资源；竞争时支持延迟、重排和临时重试。
-- 调度：静态初始顺序与动态优先级重排；支持分阶段任务、抢占与进度恢复。
-- 死锁机制：分阶段增量申请接入银行家检查；实际等待关系构造等待图；可回滚任务恢复到检查点并记录重做量。
-- 中断：紧急请求可抢占资源冲突的低优先级任务；环境和故障事件可暂停任务、释放资源并在可用后恢复。
-- 指标：完成率、平均响应时间、平均逾期时长、逐资源利用率、死锁/冲突/安全性拒绝、回滚成本和紧急任务错失率。
-- Linux 仿真：基准场景、无动态重调度、无死锁机制、抢占/非抢占对比，并输出可复现的 JSON 结果。
-
-## 快速开始
-
-只需要 Python 3.10+，不需要第三方包：
+## 直接运行
 
 ```bash
-python3 run_demo.py --scenario baseline --live
+python3 run_demo.py --scenario baseline --live --delay 0.2
 python3 run_demo.py --scenario compare
-python3 run_demo.py --scenario deadlock
+python3 run_demo.py --scenario deadlock --view trace
 python3 -m unittest discover -s tests -v
 ```
 
-默认结果视图显示任务状态表和关键指标。加 `--live` 可按模拟时间查看正在运行、等待、暂停、恢复和完成事件；默认每步停留 0.25 秒，可用 `--delay 0.5` 放慢或 `--delay 0` 关闭等待。`--view trace` 显示单组事件时间线，`--view json` 显示完整数据。用 `--output results/baseline.json` 保存完整 JSON 结果，不影响终端简报。
+`--delay 0` 取消终端等待；`--view json` 输出完整 JSON。保存原始结果和指标表：
 
-## 网页上位机
+```bash
+python3 run_demo.py --scenario baseline --output results/baseline.json --csv results/baseline.csv
+python3 run_demo.py --input data/demos/basic.json --view trace
+./scripts/run_experiments.sh
+```
 
-启动本地控制台（Python 标准库，无需安装第三方依赖）：
+所有路径在仓库根目录执行。输入文件样例位于 `data/demos/`；[接口说明](docs/interfaces.md)给出字段、状态、事件和输出约定。
+
+## 启动上位机
 
 ```bash
 python3 dashboard_server.py
 ```
 
-浏览器打开 <http://127.0.0.1:8765>。页面会调用本项目调度器运行基线场景，并展示任务、资源、指标和事件轨迹；可选择静态调度、关闭死锁保护、非抢占、策略对比与死锁演示。点击“开始仿真”会自动进入模拟时钟播放，支持暂停、倍速、逐步查看和拖动时钟；下方可通过标签与箭头切换时间线、任务、资源、趋势和日志。右侧“控制台设置”可改标题、说明、强调色、模块显隐和自定义指标，并将设置保存到浏览器或导入/导出 JSON。
+打开 <http://127.0.0.1:8765>。首次加载停在 `t=0`；点击“开始仿真”后自动播放，可暂停、倍速、单步、拖动时间轴。支持任务筛选、真实资源占用、策略比较、死锁三策略、结果导出和设置导入/导出。
 
-也可以使用 Linux 启动脚本：
+已移植 [upper-computer-template](https://github.com/MacSwimmm/upper-computer-template) 的黑绿工作区、后台点阵、页底大字震颤和功能区局部撕裂。动效有独立开关，并响应系统“减少动态效果”；交互控件使用原生界面。默认外观见 `config.json`，浏览器保存的设置优先。详见[模板移植说明](docs/dashboard.md)。
+
+![黑绿调度工作区](docs/review/dashboard-overview.png)
+
+## 已实现的核心机制
+
+- FCFS 和优先级排序，静态初始队列与动态重排；默认无额外服务员人数限制。
+- 三类分阶段任务、前置依赖、共享只读公告板、四类单实例互斥资源。
+- 调度抢占保存进度并释放资源；故障/通道关闭保存进度并保留原占用，恢复后继续。
+- 银行家检查、真实等待图环检测、可回滚检查点、重试时原子预留资源、重试上限和未解除状态。
+- 普通/紧急请求、杯子事件去重、有限资源故障、自动恢复与显式恢复。
+- 固定观察窗口 H、完成与按时完成率、完成时延、逾期、有效利用率与占用率、冲突、安全拒绝、死锁、回滚损失与实际重做量。
+- 输入、配置、种子、Git 版本、源码摘要和事件轨迹随结果保存；H 时刻到达可记录，H 之后不执行。
+
+## 验证和交付材料
+
+本轮本地验证：52 项 Python 测试在 3.10 与 3.12 通过；21 项浏览器检查通过；20 个种子 × 5 种策略的 100 次混合负载回归通过。回归负载用于检查实现，不替代组员设计的正式课程实验。GitHub Actions 自动在 Ubuntu 22.04/Python 3.10、Ubuntu 24.04/Python 3.12 和 Chromium 上复验，当前状态见 [Actions](https://github.com/MacSwimmm/26_OS/actions)。
+
+- [韩臻浩部分审查与补齐记录](docs/review/韩臻浩部分审查与交付.md)：缺陷、修复、证据和待交接事项。
+- [架构与算法说明](docs/architecture.md)、[模块与输入输出接口](docs/interfaces.md)。
+- [答辩演示步骤](docs/demo.md)、[Ubuntu 运行与环境验证](docs/run_ubuntu22.md)。
+- [实验口径与对照组](docs/experiments.md)、[成员分工和交接](docs/team_work.md)。
+
+浏览器开发检查为可选步骤，需要 Node.js 22 和 Playwright：
 
 ```bash
-chmod +x scripts/run_experiments.sh
-./scripts/run_experiments.sh
+npm ci
+npx playwright install chromium
+npm run test:browser
+python3 -m scripts.verify_workloads
 ```
 
-## 目录结构
+`BROWSER_PATH` 可指定已安装的 Chromium 系浏览器，`PYTHON_BIN` 可指定测试服务使用的解释器。应用本身无需 Node.js 或 npm。临时结果保存在 `results/`，本轮精简验收证据保存在 `docs/review/`。
 
-```text
-26_OS/
-├── tea_break_scheduler/       # 可复用的调度器、资源模型、死锁算法、指标
-├── run_demo.py                # 命令行演示和对比实验入口
-├── dashboard_server.py        # 本地网页服务与仿真 API
-├── dashboard.html             # 可自定义的上位机页面
-├── assets/                    # 页面样式、动效与静态资源
-├── scripts/run_experiments.sh # Ubuntu/Linux 一键运行脚本
-├── tests/                     # 可重复的单元测试
-├── docs/                      # 架构、实验和分工说明
-└── results/                   # 实验运行后生成的 JSON（不提交大文件）
-```
+## 实现范围
 
-## 论文和答辩使用方式
-
-1. 运行 `baseline` 查看紧急请求抢占、环境暂停和故障暂停后的恢复轨迹。
-2. 运行 `deadlock`，同一分阶段输入分别验证银行家避免、只检测不恢复、检测并回滚恢复。
-3. 运行 `compare`，比较动态重调度、抢占及死锁保护开关对固定演示输入的影响。
-4. 把 `results/*.json` 中的指标整理成论文表格，把 `trace` 中的时间线整理成流程图。
-5. 答辩时重点解释 `Task`/`TaskStage`、银行家安全性检查、等待图环检测和中断保存/恢复。
-
-完整模型、算法和实验说明见 [docs/architecture.md](docs/architecture.md) 与 [docs/experiments.md](docs/experiments.md)。
+这是单进程离散仿真，不是 Linux 内核调度器或真实多线程程序。互斥资源限制为单实例；银行家算法采用保守最大需求，可能降低并发。默认固定小场景用于说明机制，不据此宣称策略普遍最优。完整课程交付还需要成员完成正式实验分析、教师模板报告和目标演示机器的现场验收，详见审查记录。

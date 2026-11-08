@@ -1,0 +1,296 @@
+{
+  "date": "2026-11-08",
+  "starting_commit": "f02a18f57d7cb2a830809a83d43b0d6a224ede3f",
+  "template_commit": "71f6c076b7723165c5e875ad8a2ecdb82b27a908",
+  "local_os": "Ubuntu 24.04.2 LTS",
+  "python_test_versions": [
+    "3.12.3",
+    "3.10.21"
+  ],
+  "python_tests": 52,
+  "baseline_metrics": {
+    "total_tasks": 6,
+    "completed_tasks": 6,
+    "cancelled_tasks": 0,
+    "unfinished_tasks": 0,
+    "completion_rate": 1.0,
+    "on_time_completion_rate": 1.0,
+    "average_completion_delay": 7.0,
+    "average_response_time": 7.0,
+    "average_lateness": 0.0,
+    "resource_utilization": 0.029,
+    "resource_utilization_by_resource": {
+      "tea_table": 0.0556,
+      "cup_station": 0.015,
+      "return_station": 0.005,
+      "corridor": 0.0404
+    },
+    "resource_occupancy_by_resource": {
+      "tea_table": 0.0556,
+      "cup_station": 0.015,
+      "return_station": 0.005,
+      "corridor": 0.0404
+    },
+    "resource_busy_ticks": {
+      "tea_table": 11,
+      "cup_station": 3,
+      "return_station": 1,
+      "corridor": 8
+    },
+    "resource_held_ticks": {
+      "tea_table": 11,
+      "cup_station": 3,
+      "return_station": 1,
+      "corridor": 8
+    },
+    "resource_available_ticks": {
+      "tea_table": 198,
+      "cup_station": 200,
+      "return_station": 200,
+      "corridor": 198
+    },
+    "resource_outage_ticks": {
+      "tea_table": 2,
+      "cup_station": 0,
+      "return_station": 0,
+      "corridor": 2
+    },
+    "resource_outage_held_ticks": {
+      "tea_table": 2,
+      "cup_station": 0,
+      "return_station": 0,
+      "corridor": 2
+    },
+    "deadlock_count": 0,
+    "conflict_count": 2,
+    "urgent_eligible_tasks": 1,
+    "urgent_missed_tasks": 0,
+    "urgent_task_miss_rate": 0.0,
+    "recoveries": 0,
+    "preemptions": 1,
+    "safety_rejection_count": 0,
+    "rollback_count": 0,
+    "rollback_work": 0,
+    "redo_work": 0
+  },
+  "deadlock_metrics": {
+    "avoidance": {
+      "total_tasks": 2,
+      "completed_tasks": 2,
+      "cancelled_tasks": 0,
+      "unfinished_tasks": 0,
+      "completion_rate": 1.0,
+      "on_time_completion_rate": 1.0,
+      "average_completion_delay": 3.0,
+      "average_response_time": 3.0,
+      "average_lateness": 0.0,
+      "resource_utilization": 0.1,
+      "resource_utilization_by_resource": {
+        "tea_table": 0.1,
+        "return_station": 0.1
+      },
+      "resource_occupancy_by_resource": {
+        "tea_table": 0.15,
+        "return_station": 0.15
+      },
+      "resource_busy_ticks": {
+        "tea_table": 2,
+        "return_station": 2
+      },
+      "resource_held_ticks": {
+        "tea_table": 3,
+        "return_station": 3
+      },
+      "resource_available_ticks": {
+        "tea_table": 20,
+        "return_station": 20
+      },
+      "resource_outage_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "resource_outage_held_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "deadlock_count": 0,
+      "conflict_count": 1,
+      "urgent_eligible_tasks": 0,
+      "urgent_missed_tasks": 0,
+      "urgent_task_miss_rate": null,
+      "recoveries": 0,
+      "preemptions": 0,
+      "safety_rejection_count": 1,
+      "rollback_count": 0,
+      "rollback_work": 0,
+      "redo_work": 0
+    },
+    "detection_only": {
+      "total_tasks": 2,
+      "completed_tasks": 0,
+      "cancelled_tasks": 0,
+      "unfinished_tasks": 2,
+      "completion_rate": 0.0,
+      "on_time_completion_rate": 0.0,
+      "average_completion_delay": null,
+      "average_response_time": null,
+      "average_lateness": null,
+      "resource_utilization": 0.05,
+      "resource_utilization_by_resource": {
+        "tea_table": 0.05,
+        "return_station": 0.05
+      },
+      "resource_occupancy_by_resource": {
+        "tea_table": 1.0,
+        "return_station": 1.0
+      },
+      "resource_busy_ticks": {
+        "tea_table": 1,
+        "return_station": 1
+      },
+      "resource_held_ticks": {
+        "tea_table": 20,
+        "return_station": 20
+      },
+      "resource_available_ticks": {
+        "tea_table": 20,
+        "return_station": 20
+      },
+      "resource_outage_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "resource_outage_held_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "deadlock_count": 1,
+      "conflict_count": 2,
+      "urgent_eligible_tasks": 0,
+      "urgent_missed_tasks": 0,
+      "urgent_task_miss_rate": null,
+      "recoveries": 0,
+      "preemptions": 0,
+      "safety_rejection_count": 0,
+      "rollback_count": 0,
+      "rollback_work": 0,
+      "redo_work": 0
+    },
+    "detection_and_recovery": {
+      "total_tasks": 2,
+      "completed_tasks": 2,
+      "cancelled_tasks": 0,
+      "unfinished_tasks": 0,
+      "completion_rate": 1.0,
+      "on_time_completion_rate": 1.0,
+      "average_completion_delay": 4.0,
+      "average_response_time": 4.0,
+      "average_lateness": 0.0,
+      "resource_utilization": 0.125,
+      "resource_utilization_by_resource": {
+        "tea_table": 0.1,
+        "return_station": 0.15
+      },
+      "resource_occupancy_by_resource": {
+        "tea_table": 0.25,
+        "return_station": 0.2
+      },
+      "resource_busy_ticks": {
+        "tea_table": 2,
+        "return_station": 3
+      },
+      "resource_held_ticks": {
+        "tea_table": 5,
+        "return_station": 4
+      },
+      "resource_available_ticks": {
+        "tea_table": 20,
+        "return_station": 20
+      },
+      "resource_outage_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "resource_outage_held_ticks": {
+        "tea_table": 0,
+        "return_station": 0
+      },
+      "deadlock_count": 1,
+      "conflict_count": 3,
+      "urgent_eligible_tasks": 0,
+      "urgent_missed_tasks": 0,
+      "urgent_task_miss_rate": null,
+      "recoveries": 1,
+      "preemptions": 0,
+      "safety_rejection_count": 0,
+      "rollback_count": 1,
+      "rollback_work": 1,
+      "redo_work": 1
+    }
+  },
+  "provenance": {
+    "schema_version": 2,
+    "git_commit": "f02a18f57d7cb2a830809a83d43b0d6a224ede3f",
+    "git_dirty": true,
+    "source_sha256": "b3e2e9a0ae932943045da08a0b534b8a6d2ff6d092c9d7edf07cf397936d62b9",
+    "python": "3.12.3",
+    "platform": "Linux",
+    "seed": null
+  },
+  "checks": {
+    "python3.12": "passed",
+    "python3.10": "passed",
+    "cli": "passed",
+    "json_and_csv_export": "passed",
+    "javascript_syntax": "passed"
+  },
+  "ubuntu22_local_container": {
+    "status": "blocked_before_execution",
+    "reason": "Docker Hub registry connection timed out"
+  },
+  "reproduce": [
+    "python3 -m unittest discover -s tests -v",
+    "python3 -m scripts.verify_workloads",
+    "npm ci && npx playwright install chromium && npm run test:browser"
+  ],
+  "mixed_workload_regression": {
+    "kind": "integration_regression",
+    "runs": 100,
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "variants": [
+      "baseline",
+      "fcfs",
+      "no_dynamic",
+      "no_deadlock",
+      "non_preemptive"
+    ],
+    "checks": [
+      "runtime ownership invariants",
+      "preserved completed work",
+      "common horizon",
+      "same workload hash within seed",
+      "no work after H"
+    ]
+  }
+}

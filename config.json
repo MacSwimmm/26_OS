@@ -1,0 +1,16 @@
+{
+  "title": "茶歇服务调度控制台",
+  "project": "茶歇服务员任务调度",
+  "subtitle": "逐步观察任务调度、资源竞争与中断恢复",
+  "accent": "#32f08c",
+  "footerText": "TeaFlow OS",
+  "widgets": {
+    "timeline": true,
+    "tasks": true,
+    "features": true,
+    "chart": true,
+    "resources": true,
+    "events": true
+  },
+  "customCards": []
+}

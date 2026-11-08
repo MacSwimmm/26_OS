@@ -1,0 +1,90 @@
+{
+  "base": "http://127.0.0.1:33571",
+  "checks": [
+    {
+      "name": "initial load is ready at t=0 without a completion message",
+      "passed": true
+    },
+    {
+      "name": "hero start auto plays; overlapping starts submit one request; no success toast",
+      "passed": true
+    },
+    {
+      "name": "pause holds the clock",
+      "passed": true
+    },
+    {
+      "name": "resume at 5x reaches the final tick and stops",
+      "passed": true
+    },
+    {
+      "name": "step and scrub pause at the chosen tick",
+      "passed": true
+    },
+    {
+      "name": "header rerun resets the clock and starts playback",
+      "passed": true
+    },
+    {
+      "name": "carousel arrows, tabs, keyboard and edge buttons agree",
+      "passed": true
+    },
+    {
+      "name": "scenario menu selects and starts the requested single scenario",
+      "passed": true
+    },
+    {
+      "name": "strategy comparison renders five real results",
+      "passed": true
+    },
+    {
+      "name": "deadlock experiment renders avoidance, detection and recovery",
+      "passed": true
+    },
+    {
+      "name": "returning from experiments preserves playable simulation snapshots",
+      "passed": true
+    },
+    {
+      "name": "custom text, accent, metrics and hidden active module persist with safe fallback",
+      "passed": true
+    },
+    {
+      "name": "settings Escape closes the dialog and restores keyboard focus",
+      "passed": true
+    },
+    {
+      "name": "all modules hidden yields an empty state; reset restores the full carousel",
+      "passed": true
+    },
+    {
+      "name": "failed requests display a visible error in detail views and recover on retry",
+      "passed": true
+    },
+    {
+      "name": "simulation results export as JSON",
+      "passed": true
+    },
+    {
+      "name": "no horizontal page overflow at 1920, 1600, 1432, 1050, 760 and 390 px",
+      "passed": true
+    },
+    {
+      "name": "footer distortion responds to pointer movement and settles back",
+      "passed": true
+    },
+    {
+      "name": "functional hover creates a nonblocking overlay and releases it after decay",
+      "passed": true
+    },
+    {
+      "name": "footer text and independent motion preferences persist and disable the effect",
+      "passed": true
+    },
+    {
+      "name": "no uncaught browser errors",
+      "passed": true
+    }
+  ],
+  "pageErrors": []
+}
