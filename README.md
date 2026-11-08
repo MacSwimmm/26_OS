@@ -47,7 +47,7 @@ python3 dashboard_server.py
 
 ## 验证和交付材料
 
-本轮本地验证：52 项 Python 测试在 3.10 与 3.12 通过；21 项浏览器检查通过；20 个种子 × 5 种策略的 100 次混合负载回归通过。回归负载用于检查实现，不替代组员设计的正式课程实验。GitHub Actions 自动在 Ubuntu 22.04/Python 3.10、Ubuntu 24.04/Python 3.12 和 Chromium 上复验，当前状态见 [Actions](https://github.com/MacSwimmm/26_OS/actions)。
+本轮本地验证：52 项 Python 测试在 3.10 与 3.12 通过；21 项浏览器检查通过；20 个种子 × 5 种策略的 100 次混合负载回归通过。回归负载用于检查实现，不替代组员设计的正式课程实验。GitHub Actions 已对实现提交 `64abbe0` 在 Ubuntu 22.04/Python 3.10、Ubuntu 24.04/Python 3.12 和 Chromium 上复验，三项全部通过，见 [独立验证记录](https://github.com/MacSwimmm/26_OS/actions/runs/42493681254)；最新提交状态见 [Actions](https://github.com/MacSwimmm/26_OS/actions)。
 
 - [韩臻浩部分审查与补齐记录](docs/review/韩臻浩部分审查与交付.md)：缺陷、修复、证据和待交接事项。
 - [架构与算法说明](docs/architecture.md)、[模块与输入输出接口](docs/interfaces.md)。

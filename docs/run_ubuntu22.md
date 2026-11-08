@@ -24,7 +24,9 @@ python3 dashboard_server.py
 | 同一主机 / 独立 CPython 3.10.21 | 52 项测试、JSON 输入及 CSV/JSON 导出通过；不等同于 Ubuntu 22.04 桌面 |
 | 本机 Microsoft Edge / Chromium | 21 项交互与动效检查、六种宽度溢出检查通过 |
 | Ubuntu 22.04 容器 | 本地尝试拉取镜像时 Docker Hub 网络超时，未运行成功，不能算通过 |
-| GitHub Actions | 配置 Ubuntu 22.04/Python 3.10、Ubuntu 24.04/Python 3.12 和 Ubuntu 22.04/Chromium；以仓库 Actions 对应提交的实际结果为准 |
+| GitHub Actions / 提交 `64abbe0` | Ubuntu 22.04/Python 3.10、Ubuntu 24.04/Python 3.12 的测试、CLI、100 次回归均通过；Ubuntu 22.04/Chromium 的 21 项浏览器检查通过 |
+
+GitHub 独立验证已通过：[运行 42493681254](https://github.com/MacSwimmm/26_OS/actions/runs/42493681254)，精简记录见 `docs/review/github-validation.json`。
 
 容器下载失败的原因是访问 `registry-1.docker.io` 超时，不是已发现的代码兼容性失败。CI 和本机验证均不能替代教师目标桌面的最后现场检查。
 
