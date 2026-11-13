@@ -1,4 +1,4 @@
-"""Validated input models and runtime state (Python 3.10+)."""
+# 本模块集中定义调度器共享的数据结构和输入约束；排序与运行流程分别由 policies.py、scheduler.py 负责。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,12 +6,18 @@ from enum import Enum
 from typing import Any
 
 
+# ---------------------------------------------------------------------------
+# 基础校验：确保所有整数字段和资源声明都符合系统约束。
+# ---------------------------------------------------------------------------
+
 def require_int(name: str, value: int, minimum: int = 0) -> None:
+    # bool 是 int 的子类，因此用精确类型判断，避免 True 被误当作数值 1。
     if type(value) is not int or value < minimum:
         raise ValueError(f"{name} must be an integer >= {minimum}")
 
 
 def validate_claim(claim: dict[str, int]) -> None:
+    # 资源声明只接受正整数；零需求应省略，避免进入分配账本或等待图。
     if not isinstance(claim, dict):
         raise ValueError("resource claims must be an object")
     for name, amount in claim.items():
@@ -20,17 +26,23 @@ def validate_claim(claim: dict[str, int]) -> None:
         require_int("resource claim", amount, 1)
 
 
+# ---------------------------------------------------------------------------
+# 任务状态枚举
+# ---------------------------------------------------------------------------
+
 class TaskState(str, Enum):
-    PENDING = "pending"       # NEW in the design specification
+    # BLOCKED 需结合 waiting_reason 区分依赖等待、资源冲突和安全检查拒绝。
+    PENDING = "pending"
     READY = "ready"
     RUNNING = "running"
-    BLOCKED = "blocked"       # WAITING: reason distinguishes dependencies/resources
+    BLOCKED = "blocked"
     PAUSED = "paused"
-    COMPLETED = "completed"   # DONE
-    CANCELLED = "cancelled"   # CANCELED
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class InterruptType(str, Enum):
+    # REQUEST、URGENT、CUP_TAKEN 可带入新任务；其余类型改变资源或任务运行环境。
     REQUEST = "request"
     CUP_TAKEN = "cup_taken"
     URGENT = "urgent"
@@ -39,9 +51,13 @@ class InterruptType(str, Enum):
     RESTORE = "restore"
 
 
+# ---------------------------------------------------------------------------
+# 资源模型
+# ---------------------------------------------------------------------------
+
 @dataclass
 class Resource:
-    """Mutex resources have one instance; shared resources are read-only."""
+    # 等待图环判据限定于单实例互斥资源；shared 资源不进入互斥占用账本。
     name: str
     capacity: int = 1
     shared: bool = False
@@ -58,8 +74,13 @@ class Resource:
             raise ValueError("wait-for cycle detection requires single-instance mutex resources")
 
 
+# ---------------------------------------------------------------------------
+# 任务阶段
+# ---------------------------------------------------------------------------
+
 @dataclass
 class TaskStage:
+    # resources 是本阶段所需持有的资源；阶段完成后按 release_resources 明确释放。
     name: str
     duration: int
     resources: dict[str, int] = field(default_factory=dict)
@@ -77,18 +98,26 @@ class TaskStage:
             raise ValueError("duplicate resource release")
 
 
+# ---------------------------------------------------------------------------
+# 任务对象：调度器核心实体
+# ---------------------------------------------------------------------------
+
 @dataclass
 class Task:
+    # 输入属性描述任务；状态属性由 Scheduler 更新，并随最终结果一起序列化。
+    # 业务声明：优先级值越大越先调度，deadline 是绝对模拟时刻，duration 是总工作量。
     task_id: str
     name: str
     priority: int
     deadline: int
     duration: int
     dependencies: list[str] = field(default_factory=list)
+    # resources 用于单阶段任务；多阶段任务应把需求放到 stages，不能两种写法混用。
     resources: dict[str, int] = field(default_factory=dict)
     preemptible: bool = True
     urgent: bool = False
     submitted_at: int = 0
+    # 以下字段由事件循环更新；remaining 是当前阶段剩余量，completed_work 是累计有效进度。
     state: TaskState = TaskState.PENDING
     remaining: int | None = None
     started_at: int | None = None
@@ -96,6 +125,7 @@ class Task:
     preemptions: int = 0
     saved_remaining: int | None = None
     stages: list[TaskStage] = field(default_factory=list)
+    # Banker 使用整个任务的最大需求；回滚只允许用于可重放的阶段工作。
     max_claim: dict[str, int] = field(default_factory=dict)
     rollback_allowed: bool = False
     checkpoint: int = 0
@@ -103,6 +133,7 @@ class Task:
     max_retries: int = 3
     arrival_time: int | None = None
     completed_work: int = 0
+    # rolled_back_work 是累计丢失量；redo_remaining/redone_work 只统计回滚后的实际重做。
     rolled_back_work: int = 0
     stage_index: int = 0
     redo_remaining: int = 0
@@ -111,6 +142,7 @@ class Task:
     task_type: str = "service"
 
     def __post_init__(self) -> None:
+        # 先校验输入形状和任务内约束，避免非法任务进入离散事件循环。
         if not isinstance(self.task_id, str) or not self.task_id:
             raise ValueError("task_id is required")
         if not isinstance(self.dependencies, list) or any(not isinstance(d, str) for d in self.dependencies):
@@ -128,6 +160,7 @@ class Task:
         require_int("submitted_at", self.submitted_at)
         require_int("max_retries", self.max_retries)
         require_int("checkpoint", self.checkpoint)
+        # arrival_time 是兼容字段，必须与实际调度使用的 submitted_at 保持一致。
         if self.arrival_time is not None and self.arrival_time != self.submitted_at:
             raise ValueError("arrival_time and submitted_at must agree")
         self.arrival_time = self.submitted_at
@@ -140,6 +173,7 @@ class Task:
             raise ValueError("use stages or legacy resources, not both")
         if self.checkpoint > self.stage_index:
             raise ValueError("checkpoint cannot refer to future work")
+        # 未声明 Banker 最大需求时，从传统资源字段和各阶段需求中取每种资源的最大值。
         if not self.max_claim:
             self.max_claim = dict(self.resources)
             for stage in self.stages:
@@ -168,11 +202,17 @@ class Task:
         return None if self.finished_at is None else self.finished_at - self.submitted_at
 
 
+# ---------------------------------------------------------------------------
+# 外部中断事件
+# ---------------------------------------------------------------------------
+
 @dataclass(frozen=True)
 class Interrupt:
+    # 事件在指定时刻注入仿真；冻结对象可避免排队期间被调用方意外改写。
     at: int
     kind: InterruptType
     description: str
+    # 任务到达事件携带 task；FAULT/ENVIRONMENT 可指向资源或任务，RESTORE 指向资源。
     task: Task | None = None
     resource: str | None = None
     duration: int = 0
@@ -181,6 +221,7 @@ class Interrupt:
     cup_id: str | None = None
 
     def __post_init__(self) -> None:
+        # 字符串和枚举输入统一转成 InterruptType，后续分支只需处理一种表示。
         object.__setattr__(self, "kind", InterruptType(self.kind))
         if self.task is not None and not isinstance(self.task, Task):
             raise ValueError("event task must be a Task")
@@ -204,11 +245,18 @@ class Interrupt:
             raise ValueError("restore requires a resource")
 
 
+# ---------------------------------------------------------------------------
+# 调度器配置
+# ---------------------------------------------------------------------------
+
 @dataclass
 class SchedulerConfig:
-    workers: int | None = None  # Optional extension; default model has no staff limit.
+    # None 表示模型不设固定服务员数量，默认并发仅由资源约束决定。
+    workers: int | None = None
+    # dynamic_rescheduling 控制每个边界是否重排；preemptive 控制是否可中断运行任务。
     dynamic_rescheduling: bool = True
     preemptive: bool = True
+    # 三个保护开关分别控制安全分配、环检测和检测后的回滚恢复。
     banker_enabled: bool = True
     deadlock_detection: bool = True
     deadlock_recovery: bool = True
@@ -226,12 +274,18 @@ class SchedulerConfig:
             require_int("workers", self.workers, 1)
         if self.policy not in ("priority", "fcfs"):
             raise ValueError("policy must be priority or fcfs")
+        # 恢复必须由检测结果触发，因此禁止关闭检测却保留恢复。
         if self.deadlock_recovery and not self.deadlock_detection:
             raise ValueError("deadlock recovery requires detection")
 
 
+# ---------------------------------------------------------------------------
+# 指标汇总
+# ---------------------------------------------------------------------------
+
 @dataclass
 class Metrics:
+    # 任务数量和时延是跨任务汇总值；urgent_* 只针对已到截止时刻的紧急任务。
     total_tasks: int = 0
     completed_tasks: int = 0
     cancelled_tasks: int = 0
@@ -248,6 +302,8 @@ class Metrics:
     rollback_count: int = 0
     rollback_work: int = 0
     redo_work: int = 0
+    # busy 是资源实际参与执行的 tick；held 包含等待时仍被持有的 tick。
+    # available/outage 记录时间分母，outage_held 单独计故障期间仍保留的占用。
     resource_busy_ticks: dict[str, int] = field(default_factory=dict)
     resource_held_ticks: dict[str, int] = field(default_factory=dict)
     resource_available_ticks: dict[str, int] = field(default_factory=dict)
@@ -255,6 +311,7 @@ class Metrics:
     resource_outage_held_ticks: dict[str, int] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
+        # 分母为零时返回 None；序列化后是 null，表示该项指标没有定义。
         ratio = lambda a, b: round(a / b, 4) if b else None
         util = {name: ratio(self.resource_busy_ticks.get(name, 0), ticks)
                 for name, ticks in self.resource_available_ticks.items()}
@@ -294,6 +351,7 @@ TASK_INPUT_FIELDS = ("task_id", "name", "priority", "deadline", "duration", "dep
 
 
 def task_from_dict(data: dict[str, Any]) -> Task:
+    # 只接受场景输入字段，拒绝把上一次运行生成的 state/remaining 等状态带入新任务。
     data = dict(data)
     if set(data) - set(TASK_INPUT_FIELDS):
         raise ValueError("scenario task contains unsupported or runtime fields")

@@ -1,4 +1,4 @@
-"""HTTP contract checks against an actual local server (no external services)."""
+# 使用真实本地 HTTP 服务验证 API 契约，不依赖外部服务。
 import json
 import threading
 import unittest

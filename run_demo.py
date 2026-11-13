@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a live console demo or write machine-readable simulation results."""
+# 终端入口支持实时进度、结果摘要、事件轨迹，以及 JSON/CSV 导出。
 
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ EVENT_LABELS = {
 
 
 def _task_status(task: Task) -> str:
+    # 资源等待和依赖等待都处于 BLOCKED，显示 waiting_reason 才能区分原因。
     label = STATE_LABELS[task.state]
     stage = task.current_stage.name if task.current_stage else task.name
     if task.state == TaskState.RUNNING:
@@ -57,6 +58,7 @@ def _task_status(task: Task) -> str:
 
 
 def _progress_row(now: int, tasks: dict[str, Task], events: list[dict], delay: float) -> None:
+    # delay 只放慢终端显示，不改变 Scheduler 内部离散时间或任务工作量。
     active = [f"{task.task_id} {task.name}({_task_status(task)})"
               for task in tasks.values()
               if task.state in (TaskState.RUNNING, TaskState.BLOCKED, TaskState.PAUSED)]
@@ -75,6 +77,7 @@ def _progress_row(now: int, tasks: dict[str, Task], events: list[dict], delay: f
 
 
 def _print_result_table(name: str, result: dict) -> None:
+    # 展示层直接读取引擎指标，避免终端与上位机各自计算出不同统计口径。
     metrics = result["metrics"]
     print(f"\n{name}：{result.get('stop_reason', '已结束')}")
     print("任务       状态       到达  开始  完成  剩余")
@@ -110,6 +113,7 @@ def _print_result_table(name: str, result: dict) -> None:
 
 
 def _print_comparison(results: dict[str, dict]) -> None:
+    # None 表示指标无定义，打印为 N/A 而不是 0，避免误读空分母结果。
     print("方案                 完成率  平均响应  紧急错失  死锁  抢占  回滚")
     for name, result in results.items():
         metrics = result["metrics"]
@@ -138,6 +142,7 @@ def main() -> int:
     if not math.isfinite(args.delay) or args.delay < 0:
         parser.error("--delay cannot be negative")
 
+    # 比较场景一次运行多套配置；普通场景只创建一个 Scheduler 实例。
     if args.scenario == "deadlock":
         result = deadlock_demo()
         if args.view == "json":
@@ -170,6 +175,7 @@ def main() -> int:
                     print(f"t={event['time']:>3}  {label}: "
                           f"{event.get('task_id', '')} {event.get('reason', event.get('description', ''))}".rstrip())
 
+    # 对照组的摘要不足以解释差异，因此 trace 模式按方案逐组输出事件。
     if args.view == "trace" and args.scenario in ("compare", "deadlock") and not args.input:
         for name, item in result.items():
             print(f"\n{name} 事件轨迹")
