@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local HTTP API for the OS scheduling simulator control panel."""
+# 本地控制台 API：负责输入校验、仿真调用和快照序列化，不在 HTTP 层重写调度算法。
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ SCENARIOS = {
     "baseline": "完整调度",
     "fcfs": "FCFS 调度",
     "no_dynamic": "静态调度",
-    "no_deadlock": "关闭死锁保护",
+    "no_deadlock": "仅死锁检测",
     "non_preemptive": "非抢占调度",
     "compare": "调度策略对比",
     "deadlock": "死锁避免与恢复",
@@ -25,6 +25,7 @@ SCENARIOS = {
 
 
 def _snapshot(scheduler, now: int, events: list[dict]) -> dict:
+    # 不暴露尚未到达的任务；holders 直接来自资源账本，避免前端推算出假占用。
     tasks = {}
     for task_id, task in scheduler.tasks.items():
         if task.submitted_at > now:
@@ -59,6 +60,7 @@ def _snapshot(scheduler, now: int, events: list[dict]) -> dict:
 
 
 def _run_single(name: str) -> dict:
+    # 单场景保留每个边界快照，因此浏览器能够按模拟时间回放任务状态。
     scheduler = build_scheduler(name)
     snapshots = []
 
@@ -70,6 +72,7 @@ def _run_single(name: str) -> dict:
 
 
 def _run_compare() -> dict:
+    # 既返回适合卡片展示的指标，也保留每组完整结果供事件日志和导出使用。
     results = run_comparison()
     return {
         "scenario": "compare",
@@ -83,6 +86,7 @@ def _run_compare() -> dict:
 
 
 def _run_deadlock() -> dict:
+    # 将算法内部键映射为界面名称，指标仍来自各自独立的 Scheduler 运行结果。
     results = deadlock_demo()
     labels = {
         "avoidance": "银行家避免",
@@ -104,6 +108,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     server_version = "TeaBreakDashboard/2.0"
 
     def do_GET(self):
+        # 所有静态路径均在下方白名单中，避免把任意本地文件暴露给浏览器。
         path = urlparse(self.path).path
         if path == "/api/config":
             self._json(json.loads((ROOT / "config.json").read_text(encoding="utf-8")))
@@ -142,6 +147,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        # 运行接口限制请求体大小，并先验证场景名，再调用对应的固定仿真入口。
         if urlparse(self.path).path != "/api/run":
             self._json({"error": "not found"}, 404)
             return
@@ -158,6 +164,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             data = _run_compare() if scenario == "compare" else _run_deadlock() if scenario == "deadlock" else _run_single(scenario)
             self._json(data)
         except (ValueError, json.JSONDecodeError) as error:
+            # 用户输入错误返回 400；引擎异常走后续 500 分支并带回错误信息。
             self._json({"error": str(error)}, 400)
         except Exception as error:
             self._json({"error": f"simulation failed: {error}"}, 500)

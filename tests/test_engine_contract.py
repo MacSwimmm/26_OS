@@ -1,4 +1,4 @@
-"""Hand-calculated regressions for the course specification and audit defects."""
+# 按课程规格手算边界案例，覆盖调度、资源、死锁和统计口径契约。
 import unittest
 from dataclasses import replace
 

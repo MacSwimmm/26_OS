@@ -1,4 +1,4 @@
-"""Seeded integration stress checks; these loads are not a validated course experiment."""
+# 固定种子的集成压力回归；这些合成负载不是经业务校准的正式课程实验。
 from __future__ import annotations
 import argparse
 import csv

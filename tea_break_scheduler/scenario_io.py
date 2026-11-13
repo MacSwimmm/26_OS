@@ -1,4 +1,4 @@
-"""Versioned JSON scenario input and result provenance."""
+# 本模块负责场景 JSON 的读写和运行来源记录，不实现调度算法。
 from __future__ import annotations
 import hashlib
 import json
@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def provenance() -> dict:
+    # 记录提交、Python 版本和源码摘要，供结果复核与复现实验使用。
     def git(*args):
         try:
             return subprocess.check_output(["git", "-C", str(ROOT), *args], stderr=subprocess.DEVNULL,
@@ -21,8 +22,7 @@ def provenance() -> dict:
             return None
     revision = git("rev-parse", "HEAD")
     dirty = git("status", "--porcelain", "--untracked-files=no")
-    # Hash the actual algorithm sources, so local changes are reproducible even
-    # when results are produced before the implementation commit.
+    # Git dirty 不能描述具体差异，因此另对包内源码逐字节计算摘要。
     sources = hashlib.sha256()
     for path in sorted((ROOT / "tea_break_scheduler").glob("*.py")):
         sources.update(path.name.encode())
@@ -33,6 +33,7 @@ def provenance() -> dict:
 
 
 def scenario_from_dict(data: dict):
+    # 先校验 JSON 结构和字段形状，再构造模型对象执行更细的语义检查。
     from .scheduler import Scheduler
     if not isinstance(data, dict) or data.get("schema_version", 1) != 1:
         raise ValueError("scenario must be an object with schema_version=1")
@@ -53,6 +54,7 @@ def scenario_from_dict(data: dict):
     events = []
     for value in data.get("events", []):
         value = dict(value)
+        # 事件中的嵌套任务和枚举值需要先还原，再交给 Interrupt 做字段级校验。
         value["kind"] = InterruptType(value["kind"])
         if value.get("task") is not None:
             value["task"] = task_from_dict(value["task"])
@@ -63,10 +65,12 @@ def scenario_from_dict(data: dict):
 
 
 def load_scenario(path: Path):
+    # 文件读取或 JSON 解码异常由 CLI/API 调用边界转换成用户可读错误。
     return scenario_from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
 def scenario_document(tasks, resources, config, events=(), seed=None) -> dict:
+    # 只导出输入字段，运行时状态不进入场景文件，避免把旧状态带进下一次仿真。
     def task_document(task):
         values = asdict(task)
         return {key: values[key] for key in TASK_INPUT_FIELDS}
