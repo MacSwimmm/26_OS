@@ -11,7 +11,7 @@ from typing import Callable, Iterable
 from .deadlock import build_wait_for_graph, choose_recovery_victim, find_cycles
 from .metrics import Metrics
 from .models import Interrupt, InterruptType, SchedulerConfig, Task, TaskState
-from .policies import order_tasks, selection_reason
+from .policies import explain, order_tasks
 from .resources import ResourceManager
 
 
@@ -260,7 +260,8 @@ class Scheduler:
             for tid, t in self.tasks.items() if t.submitted_at <= self.time})
 
     def _start_tasks(self) -> None:
-        for task in self._ready_tasks():
+        candidates = self._ready_tasks()
+        for index, task in enumerate(candidates):
             self._preempt_for(task)
             if self.config.workers is not None and len(self.running) >= self.config.workers:
                 task.waiting_reason = "worker capacity"
@@ -295,11 +296,31 @@ class Scheduler:
             self.running.append(task.task_id)
             self.waiting_requests.pop(task.task_id, None)
             self._wait_keys.pop(task.task_id, None)
+            # 仅补充已成功申请资源的事件说明，不参与队列、抢占或资源裁决。
+            other = candidates[index + 1] if index + 1 < len(candidates) else None
+            if self.config.dynamic_rescheduling:
+                detail = explain(task, other, self.config.policy)
+                mode = "动态排序"
+            else:
+                mode = "静态队列"
+                if other is None:
+                    detail = "其后无候选"
+                elif task.task_id in self._initial_order:
+                    detail = ("保持 t=0 初始队列次序" if other.task_id in self._initial_order
+                              else "初始队列任务先于后续到达任务")
+                else:
+                    detail = "后续到达按到达时间、任务编号追加"
+            ordering = {"mode": "dynamic" if self.config.dynamic_rescheduling else "static",
+                        "policy": self.config.policy, "rank": index + 1,
+                        "candidate_count": len(candidates),
+                        "compared_to": other.task_id if other else None, "reason": detail}
+            comparison = f"相对 {other.task_id}：" if other else ""
             self._record("resume" if resumed else "start" if task.stage_index == 0 else "stage_start",
                          task_id=task.task_id, stage=task.current_stage.name if task.current_stage else task.name,
                          stage_index=task.stage_index, acquired=request,
-                         remaining=task.remaining, reason=selection_reason(self.config.policy)
-                         if self.config.dynamic_rescheduling else "static initial order; later arrivals appended")
+                         remaining=task.remaining, ordering=ordering,
+                         reason=f"{mode}候选第 {index + 1}/{len(candidates)} 位；"
+                                f"{comparison}{detail}；资源检查通过")
             task.saved_remaining = None
 
     def _finish_tasks(self) -> None:

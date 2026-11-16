@@ -13,6 +13,7 @@ result = scheduler.run(progress_callback=None)
 ## 排序、资源与死锁
 
 - `policies.order_tasks(tasks, "fcfs" | "priority") -> list[Task]`：返回新列表，不改变输入状态。
+- `rank_tasks(tasks, policy)` 返回 `(Task, 相对下一候选的理由)`；`explain(first, second, policy)` 要求任务对顺序正确。未知策略或反向比较抛 `ValueError`；详见 [排序说明](policies.md)。
 - `ResourceManager.try_acquire(task, arrived_tasks, t, request) -> AllocationResult`：增量、原子申请；成功返回 `granted=True`，失败返回原因。未知资源、负数、超过 Max 等非法输入抛 `ValueError`。
 - 失败原因：`resource occupied`、`resource outage`、`Banker safety check rejected request`，分别表示所有权冲突、暂不可用和不安全。
 - `release(task_id, names=None)`：释放指定资源或全部资源。通过 `allocation[task_id]` 查询账目，外部不应直接修改。
@@ -60,10 +61,13 @@ result = scheduler.run(progress_callback=None)
 - `input`：实际输入任务、资源、事件、配置和种子，可保存后再次传给 `--input`。
 - `tasks`：最终运行状态，包括阶段、工作量、等待原因、检查点、重试和完成时间；含未来输入任务。
 - `trace`：按非递减边界时刻记录事件，包含原因、申请、释放、丢失量和恢复信息。
+
 - `metrics`：定义见 `docs/experiments.md`，无定义值用 `null`。
 - `unfinished`：窗口内未完成任务的 `age/remaining_work/reason`。
 - `config/observation_horizon/elapsed_time/stop_reason`：配置、统一窗口、执行结束时刻、原因。
 - `metadata`：Python、系统、Git 提交、是否修改、源码摘要、输入摘要、负载摘要及种子；Git 不可用时相应字段为 `null`。
+
+`start/resume/stage_start` 事件的 `reason` 现为实际候选名次与比较依据的可读说明，新增 `ordering` 对象，含 `mode/policy/rank/candidate_count/compared_to/reason`。名次基于该次尝试开始前的候选列表；排序不保证资源一定可得。静态队列按初始顺序/后续追加解释。事件类型、时刻和原有业务字段保留，外部工具应读取结构化字段，不把自然语言 `reason` 当固定枚举。此为 schema 2 的附加事件字段。
 
 `source_sha256` 覆盖调度包所有 Python 源码；`workload_sha256` 覆盖任务、资源和事件，不包含策略配置。判断同种子对照是否共用负载时使用后者。
 

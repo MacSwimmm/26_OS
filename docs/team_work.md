@@ -5,7 +5,7 @@
 | 成员 | 主要职责 | 实际路径/交接 |
 |---|---|---|
 | 韩臻浩 | 公共结构、引擎、中断、抢占恢复、死锁核心、集成测试与演示入口 | `models.py`、`scheduler.py`、`deadlock.py`、`scenario_io.py`、`run_demo.py`、上位机、`docs/interfaces.md`、`docs/demo.md` |
-| 李铭昊 | FCFS/优先级纯排序、并列规则和手工排序案例 | `policies.py`；补充排序说明与预期/实测核对 |
+| 李铭昊 | FCFS/优先级纯排序、并列规则和手工排序案例 | `policies.py`、`docs/policies.md`、`data/policies/cases.json`、`scripts/check_policies.py`；PR #3 经统一修复与集成，见交付记录 |
 | 卞苏阳 | 基础资源管理、竞争/死锁案例验证、Ubuntu 22.04 运行记录 | `resources.py`、`data/demos/`、`docs/run_ubuntu22.md`；不将银行家和回滚核心归到此职责 |
 | 王晶莹 | 正式实验输入、指标手算、批量统计、图表及实验章节 | 以 `result.metrics/input/metadata` 为稳定接口；`docs/experiments.md`，正式材料另行交付 |
 | 李和雨 | 数学模型、论文主笔、引用、报告模板与全文核对 | `docs/architecture.md`、指标定义；最终 Word 报告与参考文献仍需整合 |
@@ -22,3 +22,5 @@
 - 给李和雨：实际算法、默认并发模型、能力限制与答辩步骤；论文不能写成多线程系统、最优算法或已完成所有正式实验。
 
 反馈仍采用“输入、命令、预期、实际、日志”五项。修改公共接口后同步文档、测试和相关成员的材料。
+
+2026-11-16 排序交接：保留 PR #3 的正确排序接口与案例基础，补齐日志接入、边界验证和说明。软件材料见 [排序说明](policies.md) 与 [修复交付记录](review/PR3排序修复交付.md)。这表示该职责对应的软件交付已由统一集成补齐；个人实际工作及答辩理解仍按提交、材料和现场说明核对。
