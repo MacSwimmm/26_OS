@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "kind": "ordering_cases",
+  "note": "预期顺序和推导在运行前列明，核对脚本只读；不是 run_demo 的完整场景输入。",
+  "cases": [
+    {
+      "case_id": "C1",
+      "category": "到达先后",
+      "policy": "fcfs",
+      "expected": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "steps": [
+        "第 1 轮：比较到达时刻，T1 的 submitted_at=0 最小，T1 排第一。",
+        "第 2 轮：T2、T3 都在 2 到达，比 task_id，T2 < T3，T2 排第二。",
+        "第 3 轮：只剩 T3。"
+      ],
+      "tasks": [
+        {
+          "task_id": "T1",
+          "name": "普通送水",
+          "priority": 2,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0
+        },
+        {
+          "task_id": "T2",
+          "name": "紧急送水",
+          "priority": 3,
+          "deadline": 4,
+          "duration": 1,
+          "submitted_at": 2,
+          "urgent": true
+        },
+        {
+          "task_id": "T3",
+          "name": "回收空杯",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 2
+        }
+      ],
+      "observed_at": 2
+    },
+    {
+      "case_id": "C2",
+      "category": "不同优先级",
+      "policy": "priority",
+      "expected": [
+        "T2",
+        "T1",
+        "T3"
+      ],
+      "steps": [
+        "第 1 轮：比较 priority，T2=3 最大，T2 排第一。",
+        "第 2 轮：剩余 T1(2)、T3(1)，T1 排第二。",
+        "第 3 轮：只剩 T3。"
+      ],
+      "tasks": [
+        {
+          "task_id": "T1",
+          "name": "普通送水",
+          "priority": 2,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0
+        },
+        {
+          "task_id": "T2",
+          "name": "紧急送水",
+          "priority": 3,
+          "deadline": 4,
+          "duration": 1,
+          "submitted_at": 2,
+          "urgent": true
+        },
+        {
+          "task_id": "T3",
+          "name": "回收空杯",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 2
+        }
+      ],
+      "observed_at": 2
+    },
+    {
+      "case_id": "C3",
+      "category": "同优先级并列",
+      "policy": "priority",
+      "expected": [
+        "C",
+        "D",
+        "A",
+        "B"
+      ],
+      "steps": [
+        "第 1 轮：四个任务 priority 都是 1，并列，改比 deadline。",
+        "第 2 轮：C=20、D=20、A=30、B=40，C 与 D 最小。",
+        "第 3 轮：C 与 D 的 deadline 相同，比 submitted_at 都是 5，仍并列。",
+        "第 4 轮：比 task_id，C < D，故 C 在 D 前；随后 A(30)、B(40)。"
+      ],
+      "tasks": [
+        {
+          "task_id": "A",
+          "name": "擦桌",
+          "priority": 1,
+          "deadline": 30,
+          "duration": 1,
+          "submitted_at": 5
+        },
+        {
+          "task_id": "B",
+          "name": "补杯",
+          "priority": 1,
+          "deadline": 40,
+          "duration": 1,
+          "submitted_at": 1
+        },
+        {
+          "task_id": "C",
+          "name": "倒渣",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 5
+        },
+        {
+          "task_id": "D",
+          "name": "收盘",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 5
+        }
+      ],
+      "observed_at": 5
+    },
+    {
+      "case_id": "C4",
+      "category": "边界：三项全并列",
+      "policy": "priority",
+      "expected": [
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "steps": [
+        "优先级、截止时间、到达时刻全相同，前三级规则都失效。",
+        "按 task_id 升序：t1 < t2 < t3。"
+      ],
+      "tasks": [
+        {
+          "task_id": "t3",
+          "name": "末端清扫",
+          "priority": 1,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0
+        },
+        {
+          "task_id": "t1",
+          "name": "台面整理",
+          "priority": 1,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0
+        },
+        {
+          "task_id": "t2",
+          "name": "器具归位",
+          "priority": 1,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0
+        }
+      ],
+      "observed_at": 0
+    },
+    {
+      "case_id": "C5",
+      "category": "边界：空候选集",
+      "policy": "priority",
+      "expected": [],
+      "steps": [
+        "候选集为空，返回空列表；并不代表整个引擎停止，仍需处理后续到达和运行任务。"
+      ],
+      "tasks": [],
+      "observed_at": 0
+    },
+    {
+      "case_id": "C6",
+      "category": "同优先级同截止时间，比较到达",
+      "policy": "priority",
+      "observed_at": 5,
+      "tasks": [
+        {
+          "task_id": "A",
+          "name": "A",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 5,
+          "urgent": false
+        },
+        {
+          "task_id": "Z",
+          "name": "Z",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 2,
+          "urgent": false
+        }
+      ],
+      "expected": [
+        "Z",
+        "A"
+      ],
+      "steps": [
+        "优先级均为 1、截止时间均为 20；Z 在 2 到达，A 在 5 到达，因此 Z 先于 A，不能提前比较编号。"
+      ]
+    },
+    {
+      "case_id": "C7",
+      "category": "FCFS 同时到达，忽略优先级和截止时间",
+      "policy": "fcfs",
+      "observed_at": 0,
+      "tasks": [
+        {
+          "task_id": "T9",
+          "name": "T9",
+          "priority": 9,
+          "deadline": 1,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": false
+        },
+        {
+          "task_id": "T2",
+          "name": "T2",
+          "priority": 2,
+          "deadline": 2,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": false
+        },
+        {
+          "task_id": "T10",
+          "name": "T10",
+          "priority": 1,
+          "deadline": 30,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": false
+        }
+      ],
+      "expected": [
+        "T10",
+        "T2",
+        "T9"
+      ],
+      "steps": [
+        "到达时间均为 0，按字符串编号排序：T10 < T2 < T9；不是提取数字后的自然序。"
+      ]
+    },
+    {
+      "case_id": "C8",
+      "category": "紧急标记不能越过实际优先级",
+      "policy": "priority",
+      "observed_at": 0,
+      "tasks": [
+        {
+          "task_id": "U",
+          "name": "U",
+          "priority": 1,
+          "deadline": 2,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": true
+        },
+        {
+          "task_id": "N",
+          "name": "N",
+          "priority": 2,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": false
+        }
+      ],
+      "expected": [
+        "N",
+        "U"
+      ],
+      "steps": [
+        "N 的 priority=2 大于 U 的 1，所以 N 在前；urgent 不在排序键中，截止时间此时也不参与决胜。"
+      ]
+    },
+    {
+      "case_id": "C9",
+      "category": "仅一个候选",
+      "policy": "priority",
+      "observed_at": 3,
+      "tasks": [
+        {
+          "task_id": "ONLY",
+          "name": "ONLY",
+          "priority": 1,
+          "deadline": 20,
+          "duration": 1,
+          "submitted_at": 3,
+          "urgent": false
+        }
+      ],
+      "expected": [
+        "ONLY"
+      ],
+      "steps": [
+        "只有 ONLY 已进入候选集，不需要与其他任务比较；实际执行仍需资源检查。"
+      ]
+    },
+    {
+      "case_id": "C10",
+      "category": "紧急标记不能越过同优先级的截止时间",
+      "policy": "priority",
+      "observed_at": 0,
+      "tasks": [
+        {
+          "task_id": "U",
+          "name": "U",
+          "priority": 1,
+          "deadline": 30,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": true
+        },
+        {
+          "task_id": "N",
+          "name": "N",
+          "priority": 1,
+          "deadline": 10,
+          "duration": 1,
+          "submitted_at": 0,
+          "urgent": false
+        }
+      ],
+      "expected": [
+        "N",
+        "U"
+      ],
+      "steps": [
+        "优先级相同，N 的截止时间 10 早于 U 的 30，因此 N 在前；紧急标记不改变这条规则。"
+      ]
+    }
+  ]
+}

@@ -51,6 +51,7 @@ python3 dashboard_server.py
 
 - [韩臻浩部分审查与补齐记录](docs/review/韩臻浩部分审查与交付.md)：缺陷、修复、证据和待交接事项。
 - [架构与算法说明](docs/architecture.md)、[模块与输入输出接口](docs/interfaces.md)。
+- [排序规则、手算核对与演示](docs/policies.md)、[PR #3 排序修复与验证](docs/review/PR3排序修复交付.md)。
 - [答辩演示步骤](docs/demo.md)、[Ubuntu 运行与环境验证](docs/run_ubuntu22.md)。
 - [实验口径与对照组](docs/experiments.md)、[成员分工和交接](docs/team_work.md)。
 

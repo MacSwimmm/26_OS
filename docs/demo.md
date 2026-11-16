@@ -24,6 +24,8 @@ python3 dashboard_server.py
 
 ## 终端备用
 
+排序模块的手算案例、实际排序理由与静态队列演示见 [排序说明](policies.md)。网页服务占用终端 1 时，在终端 2 的仓库根目录运行 `python3 scripts/check_policies.py --no-archive`。
+
 ```bash
 python3 run_demo.py --scenario baseline --live --delay 0.2
 python3 run_demo.py --scenario deadlock --view trace

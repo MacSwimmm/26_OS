@@ -1,0 +1,675 @@
+{
+  "generated_at": "2026-11-16T02:13:21+00:00",
+  "status": "local_validation_snapshot_before_publication",
+  "base_revision": "027d38a8c9d04c224b9a2091b2b25f1a411f840b",
+  "reviewed_pr_revision": "1cb6b88060301897121bf683cc0c2e5c5af77802",
+  "current": {
+    "schema_version": 2,
+    "git_commit": "027d38a8c9d04c224b9a2091b2b25f1a411f840b",
+    "git_dirty": true,
+    "source_sha256": "1c1ae59adfa6f95bbbc3f834108111be157c01b148fb78495c39f11d806bfa09",
+    "python": "3.12.3",
+    "platform": "Linux",
+    "seed": null
+  },
+  "python_tests": [
+    {
+      "python": "3.12.3",
+      "tests": 96,
+      "passed": true,
+      "log": "results/policies/tests-python312.log"
+    },
+    {
+      "python": "3.10.21",
+      "tests": 96,
+      "passed": true,
+      "log": "results/policies/tests-python310.log"
+    }
+  ],
+  "ordering_cases": {
+    "meta": {
+      "module": "tea_break_scheduler/policies.py",
+      "schema_version": 2,
+      "git_commit": "027d38a8c9d04c224b9a2091b2b25f1a411f840b",
+      "git_dirty": true,
+      "source_sha256": "1c1ae59adfa6f95bbbc3f834108111be157c01b148fb78495c39f11d806bfa09",
+      "python": "3.12.3",
+      "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+      "seed": null,
+      "generated_at": "2026-11-16T02:13:20+00:00",
+      "cases_path": "/home/hanzhhh/桌面/26_OS-policies-review/data/policies/cases.json",
+      "cases_sha256": "7660da02832e1ee7b34da3b28937f91a939c27fffc66db7b8284f225898a3df0",
+      "command": [
+        "/usr/bin/python3",
+        "/home/hanzhhh/桌面/26_OS-policies-review/scripts/check_policies.py",
+        "--json-out",
+        "results/policies/validation.json"
+      ]
+    },
+    "summary": {
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "cases": [
+      {
+        "case_id": "C1",
+        "policy": "fcfs",
+        "observed_at": 2,
+        "tasks": [
+          {
+            "task_id": "T1",
+            "name": "普通送水",
+            "priority": 2,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0
+          },
+          {
+            "task_id": "T2",
+            "name": "紧急送水",
+            "priority": 3,
+            "deadline": 4,
+            "duration": 1,
+            "submitted_at": 2,
+            "urgent": true
+          },
+          {
+            "task_id": "T3",
+            "name": "回收空杯",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 2
+          }
+        ],
+        "steps": [
+          "第 1 轮：比较到达时刻，T1 的 submitted_at=0 最小，T1 排第一。",
+          "第 2 轮：T2、T3 都在 2 到达，比 task_id，T2 < T3，T2 排第二。",
+          "第 3 轮：只剩 T3。"
+        ],
+        "expected": [
+          "T1",
+          "T2",
+          "T3"
+        ],
+        "actual": [
+          "T1",
+          "T2",
+          "T3"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "T1",
+            "reason": "到达更早（0 < 2）"
+          },
+          {
+            "task_id": "T2",
+            "reason": "同到达时间，按任务编号先后（T2 < T3）"
+          },
+          {
+            "task_id": "T3",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C2",
+        "policy": "priority",
+        "observed_at": 2,
+        "tasks": [
+          {
+            "task_id": "T1",
+            "name": "普通送水",
+            "priority": 2,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0
+          },
+          {
+            "task_id": "T2",
+            "name": "紧急送水",
+            "priority": 3,
+            "deadline": 4,
+            "duration": 1,
+            "submitted_at": 2,
+            "urgent": true
+          },
+          {
+            "task_id": "T3",
+            "name": "回收空杯",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 2
+          }
+        ],
+        "steps": [
+          "第 1 轮：比较 priority，T2=3 最大，T2 排第一。",
+          "第 2 轮：剩余 T1(2)、T3(1)，T1 排第二。",
+          "第 3 轮：只剩 T3。"
+        ],
+        "expected": [
+          "T2",
+          "T1",
+          "T3"
+        ],
+        "actual": [
+          "T2",
+          "T1",
+          "T3"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "T2",
+            "reason": "优先级更高（3 > 2）"
+          },
+          {
+            "task_id": "T1",
+            "reason": "优先级更高（2 > 1）"
+          },
+          {
+            "task_id": "T3",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C3",
+        "policy": "priority",
+        "observed_at": 5,
+        "tasks": [
+          {
+            "task_id": "A",
+            "name": "擦桌",
+            "priority": 1,
+            "deadline": 30,
+            "duration": 1,
+            "submitted_at": 5
+          },
+          {
+            "task_id": "B",
+            "name": "补杯",
+            "priority": 1,
+            "deadline": 40,
+            "duration": 1,
+            "submitted_at": 1
+          },
+          {
+            "task_id": "C",
+            "name": "倒渣",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 5
+          },
+          {
+            "task_id": "D",
+            "name": "收盘",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 5
+          }
+        ],
+        "steps": [
+          "第 1 轮：四个任务 priority 都是 1，并列，改比 deadline。",
+          "第 2 轮：C=20、D=20、A=30、B=40，C 与 D 最小。",
+          "第 3 轮：C 与 D 的 deadline 相同，比 submitted_at 都是 5，仍并列。",
+          "第 4 轮：比 task_id，C < D，故 C 在 D 前；随后 A(30)、B(40)。"
+        ],
+        "expected": [
+          "C",
+          "D",
+          "A",
+          "B"
+        ],
+        "actual": [
+          "C",
+          "D",
+          "A",
+          "B"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "C",
+            "reason": "同优先级、同截止时间、同到达时间，按任务编号（C < D）"
+          },
+          {
+            "task_id": "D",
+            "reason": "同优先级，截止时间更早（20 < 30）"
+          },
+          {
+            "task_id": "A",
+            "reason": "同优先级，截止时间更早（30 < 40）"
+          },
+          {
+            "task_id": "B",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C4",
+        "policy": "priority",
+        "observed_at": 0,
+        "tasks": [
+          {
+            "task_id": "t3",
+            "name": "末端清扫",
+            "priority": 1,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0
+          },
+          {
+            "task_id": "t1",
+            "name": "台面整理",
+            "priority": 1,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0
+          },
+          {
+            "task_id": "t2",
+            "name": "器具归位",
+            "priority": 1,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0
+          }
+        ],
+        "steps": [
+          "优先级、截止时间、到达时刻全相同，前三级规则都失效。",
+          "按 task_id 升序：t1 < t2 < t3。"
+        ],
+        "expected": [
+          "t1",
+          "t2",
+          "t3"
+        ],
+        "actual": [
+          "t1",
+          "t2",
+          "t3"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "t1",
+            "reason": "同优先级、同截止时间、同到达时间，按任务编号（t1 < t2）"
+          },
+          {
+            "task_id": "t2",
+            "reason": "同优先级、同截止时间、同到达时间，按任务编号（t2 < t3）"
+          },
+          {
+            "task_id": "t3",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C5",
+        "policy": "priority",
+        "observed_at": 0,
+        "tasks": [],
+        "steps": [
+          "候选集为空，返回空列表；并不代表整个引擎停止，仍需处理后续到达和运行任务。"
+        ],
+        "expected": [],
+        "actual": [],
+        "passed": true,
+        "reasons": []
+      },
+      {
+        "case_id": "C6",
+        "policy": "priority",
+        "observed_at": 5,
+        "tasks": [
+          {
+            "task_id": "A",
+            "name": "A",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 5,
+            "urgent": false
+          },
+          {
+            "task_id": "Z",
+            "name": "Z",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 2,
+            "urgent": false
+          }
+        ],
+        "steps": [
+          "优先级均为 1、截止时间均为 20；Z 在 2 到达，A 在 5 到达，因此 Z 先于 A，不能提前比较编号。"
+        ],
+        "expected": [
+          "Z",
+          "A"
+        ],
+        "actual": [
+          "Z",
+          "A"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "Z",
+            "reason": "同优先级、同截止时间，到达更早（2 < 5）"
+          },
+          {
+            "task_id": "A",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C7",
+        "policy": "fcfs",
+        "observed_at": 0,
+        "tasks": [
+          {
+            "task_id": "T9",
+            "name": "T9",
+            "priority": 9,
+            "deadline": 1,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": false
+          },
+          {
+            "task_id": "T2",
+            "name": "T2",
+            "priority": 2,
+            "deadline": 2,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": false
+          },
+          {
+            "task_id": "T10",
+            "name": "T10",
+            "priority": 1,
+            "deadline": 30,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": false
+          }
+        ],
+        "steps": [
+          "到达时间均为 0，按字符串编号排序：T10 < T2 < T9；不是提取数字后的自然序。"
+        ],
+        "expected": [
+          "T10",
+          "T2",
+          "T9"
+        ],
+        "actual": [
+          "T10",
+          "T2",
+          "T9"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "T10",
+            "reason": "同到达时间，按任务编号先后（T10 < T2）"
+          },
+          {
+            "task_id": "T2",
+            "reason": "同到达时间，按任务编号先后（T2 < T9）"
+          },
+          {
+            "task_id": "T9",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C8",
+        "policy": "priority",
+        "observed_at": 0,
+        "tasks": [
+          {
+            "task_id": "U",
+            "name": "U",
+            "priority": 1,
+            "deadline": 2,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": true
+          },
+          {
+            "task_id": "N",
+            "name": "N",
+            "priority": 2,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": false
+          }
+        ],
+        "steps": [
+          "N 的 priority=2 大于 U 的 1，所以 N 在前；urgent 不在排序键中，截止时间此时也不参与决胜。"
+        ],
+        "expected": [
+          "N",
+          "U"
+        ],
+        "actual": [
+          "N",
+          "U"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "N",
+            "reason": "优先级更高（2 > 1）"
+          },
+          {
+            "task_id": "U",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C9",
+        "policy": "priority",
+        "observed_at": 3,
+        "tasks": [
+          {
+            "task_id": "ONLY",
+            "name": "ONLY",
+            "priority": 1,
+            "deadline": 20,
+            "duration": 1,
+            "submitted_at": 3,
+            "urgent": false
+          }
+        ],
+        "steps": [
+          "只有 ONLY 已进入候选集，不需要与其他任务比较；实际执行仍需资源检查。"
+        ],
+        "expected": [
+          "ONLY"
+        ],
+        "actual": [
+          "ONLY"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "ONLY",
+            "reason": "其后无候选"
+          }
+        ]
+      },
+      {
+        "case_id": "C10",
+        "policy": "priority",
+        "observed_at": 0,
+        "tasks": [
+          {
+            "task_id": "U",
+            "name": "U",
+            "priority": 1,
+            "deadline": 30,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": true
+          },
+          {
+            "task_id": "N",
+            "name": "N",
+            "priority": 1,
+            "deadline": 10,
+            "duration": 1,
+            "submitted_at": 0,
+            "urgent": false
+          }
+        ],
+        "steps": [
+          "优先级相同，N 的截止时间 10 早于 U 的 30，因此 N 在前；紧急标记不改变这条规则。"
+        ],
+        "expected": [
+          "N",
+          "U"
+        ],
+        "actual": [
+          "N",
+          "U"
+        ],
+        "passed": true,
+        "reasons": [
+          {
+            "task_id": "N",
+            "reason": "同优先级，截止时间更早（10 < 30）"
+          },
+          {
+            "task_id": "U",
+            "reason": "其后无候选"
+          }
+        ]
+      }
+    ]
+  },
+  "behavior_compatibility": {
+    "baseline": {
+      "schema_version": 2,
+      "git_commit": "027d38a8c9d04c224b9a2091b2b25f1a411f840b",
+      "git_dirty": false,
+      "source_sha256": "aee9b3cd38283e3341a94620039e71c57d8379a50d06440ca9a73a8745ec65a8",
+      "python": "3.12.3",
+      "platform": "Linux",
+      "seed": null
+    },
+    "current": {
+      "schema_version": 2,
+      "git_commit": "027d38a8c9d04c224b9a2091b2b25f1a411f840b",
+      "git_dirty": true,
+      "source_sha256": "1c1ae59adfa6f95bbbc3f834108111be157c01b148fb78495c39f11d806bfa09",
+      "python": "3.12.3",
+      "platform": "Linux",
+      "seed": null
+    },
+    "runs": 119,
+    "snapshots": 4192,
+    "all_equal": true,
+    "differences": [],
+    "excluded": [
+      "metadata",
+      "start/resume/stage_start.reason",
+      "start/resume/stage_start.ordering"
+    ]
+  },
+  "byte_identical_files_sha256": {
+    "tea_break_scheduler/models.py": "52673c38efdb13898408638a2000986e6bbc88609a8f8e3dfc86c9864367c1fa",
+    "tea_break_scheduler/resources.py": "1fb3eefb2369495a2969e77d24eb2e8c414732a2bbc6de59f274b9aca2c2094e",
+    "tea_break_scheduler/deadlock.py": "432f1336889e90659976168d4105a889427979c7efe389397ece84d1768f9e39",
+    "tea_break_scheduler/metrics.py": "00430b2efca7252e41bc7606f378e0b9428bc0412ddd0856e736c52c018d7804",
+    "tea_break_scheduler/scenarios.py": "c838e4d73f275ab47e539e249731a1a4e9ecce59d1cc16e957d73382ebda8cd7",
+    "tea_break_scheduler/scenario_io.py": "b02fc5398716ac4442a5bade0cbc3687b6dd3ae3c850f31cd5729cb2b96d28b7",
+    "run_demo.py": "5cc8b4cdeffc1b4f881d011fceed75ac9ee4ff5d904f16cd5b6c17262f9c179a",
+    "dashboard_server.py": "e0a4e669ca3b257b33f8400dc2214ce02a142475cf21dd7e915dbaa226693920",
+    "assets/dashboard-app.js": "0b02db08723108a6c3b01d377b808e5c19320eceacaead134567749ac9a3b8cb",
+    "config.json": "12d174fa5c56bbe781d11b19a6c61804364b096d4ba2df627d044e16a95f035c"
+  },
+  "workload_regression": {
+    "kind": "integration_regression",
+    "runs": 100,
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20
+    ],
+    "variants": [
+      "baseline",
+      "fcfs",
+      "no_dynamic",
+      "no_deadlock",
+      "non_preemptive"
+    ],
+    "checks": [
+      "runtime ownership invariants",
+      "preserved completed work",
+      "common horizon",
+      "same workload hash within seed",
+      "no work after H"
+    ]
+  },
+  "browser": {
+    "checks": 21,
+    "page_errors": [],
+    "engine": "Microsoft Edge",
+    "node": "22.23.2",
+    "ordering_text_asserted": true
+  },
+  "other_checks": [
+    "fixed CLI variants and deadlock",
+    "JSON input and CSV export",
+    "experiment metrics handcheck",
+    "compileall",
+    "git diff --check"
+  ],
+  "limits": [
+    "local Ubuntu 24.04 verification",
+    "no new remote CI run",
+    "does not replace target classroom-machine acceptance"
+  ],
+  "pr_reproduction": {
+    "tests": 83,
+    "errors": 2,
+    "failures": 0,
+    "issues": [
+      "data/demos/policies_cases.json is not a scenario",
+      "checker and tests point to missing data/policies_cases.json"
+    ],
+    "log": "results/policies/pr3-1cb6b88-tests.log"
+  }
+}

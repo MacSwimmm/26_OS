@@ -39,6 +39,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#playState').textContent==='仿真已结束');
   assert.equal(await page.locator('#timeRange').inputValue(),await page.locator('#timeRange').getAttribute('max'));
   assert.match(await page.locator('#playButton').textContent(),/重播/);
+  assert.match(await page.locator('#eventFeed').textContent(),/动态排序候选第/);
   record('resume at 5x reaches the final tick and stops');
   await page.locator('#stepBack').click();
   assert.equal(await page.locator('#playState').textContent(),'已暂停');
